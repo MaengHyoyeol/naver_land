@@ -21,4 +21,7 @@ python-dotenv==1.0.0
 # Optional: For better HTML parsing
 html5lib==1.1
 
-
+# Web GUI
+streamlit==1.28.0
+plotly==5.17.0
+watchdog>=3.0.0

@@ -242,7 +242,7 @@ class NaverRealEstateCrawler:
                 return None
             
             # 2. 동일매물 묶기
-            self.click_merge_checkbox()
+            #self.click_merge_checkbox()
             
             # 3. 모든 매물 로드
             total_items = self.load_all_items()

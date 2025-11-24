@@ -218,7 +218,7 @@ def main():
             
             # 필터
             st.subheader("🔍 필터")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4, col5 = st.columns(5)
             
             with col1:
                 if '거래유형' in df.columns:
@@ -241,6 +241,20 @@ def main():
                 else:
                     selected_direction = '전체'
             
+            with col4:
+                if '확인일' in df.columns:
+                    dates = ['전체'] + sorted(df['확인일'].dropna().unique())
+                    selected_date = st.selectbox("확인일", dates)
+                else:
+                    selected_date = '전체'
+            
+            with col5:
+                if '공인중개사무소' in df.columns:
+                    agents = ['전체'] + list(df['공인중개사무소'].dropna().unique())
+                    selected_agent = st.selectbox("공인중개사무소", agents)
+                else:
+                    selected_agent = '전체'
+            
             # 필터링
             df_filtered = df.copy()
             if selected_type != '전체':
@@ -249,10 +263,79 @@ def main():
                 df_filtered = df_filtered[df_filtered['동'] == selected_dong]
             if selected_direction != '전체':
                 df_filtered = df_filtered[df_filtered['방향'] == selected_direction]
+            if selected_date != '전체':
+                df_filtered = df_filtered[df_filtered['확인일'] == selected_date]
+            if selected_agent != '전체':
+                df_filtered = df_filtered[df_filtered['공인중개사무소'] == selected_agent]
+
+            # 동일 매물 중 최신 확인일만 유지
+            dedup_key = ['가격', '공급면적', '전용면적', '층', '총층수', '방향', '공인중개사무소']
+            if all(col in df_filtered.columns for col in dedup_key) and '확인일' in df_filtered.columns:
+                df_dedup = df_filtered.copy()
+                parsed_dates = pd.to_datetime(
+                    df_dedup['확인일'].astype(str).str.replace('.', '-', regex=False),
+                    format='%y-%m-%d',
+                    errors='coerce'
+                )
+                df_dedup['_확인일_dt'] = parsed_dates
+                df_dedup = df_dedup.sort_values('_확인일_dt', ascending=False)
+                df_dedup = df_dedup.drop_duplicates(subset=dedup_key, keep='first')
+                df_dedup = df_dedup.drop(columns=['_확인일_dt'])
+                df_filtered = df_dedup.reset_index(drop=True)
             
             st.markdown("---")
             st.subheader("📊 필터링된 데이터")
-            st.dataframe(df_filtered, use_container_width=True)
+            preferred_order = [
+                '순번', '단지명', '동', '거래유형', '가격', '구분',
+                '공급면적', '전용면적', '층', '총층수', '방향',
+                '확인일', '중개사수', '공인중개사무소', '원문'
+            ]
+            display_cols = [col for col in preferred_order if col in df_filtered.columns]
+            if display_cols:
+                st.dataframe(df_filtered[display_cols], use_container_width=True)
+            else:
+                st.dataframe(df_filtered, use_container_width=True)
+            
+            st.markdown("---")
+            st.subheader("🏅 내 공인중개사 순위")
+            agent_input = st.text_input(
+                "내 공인중개사무소 이름을 입력하세요",
+                placeholder="예: 영등포아트자이공인중개사사무소",
+                key="agent_name_input"
+            )
+            rank_button = st.button("순위 계산", use_container_width=True)
+            
+            if rank_button:
+                if not agent_input:
+                    st.warning("공인중개사무소 이름을 입력해주세요.")
+                else:
+                    with st.spinner("순위 계산 중..."):
+                        rankings = DataParser.calculate_agent_rankings(df_filtered, agent_input)
+                        if rankings is None or rankings.empty:
+                            st.info("해당 공인중개사무소의 순위 데이터를 찾을 수 없습니다.")
+                        else:
+                            st.success(f"{agent_input} 순위 결과")
+                            
+                            if '같은매물내순위' in rankings.columns:
+                                def highlight_rank(row):
+                                    rank_value = row.get('같은매물내순위')
+                                    if pd.notna(rank_value) and rank_value >= 3:
+                                        return ['background-color: #ffe5e5'] * len(row)
+                                    return [''] * len(row)
+                                
+                                styled_rankings = rankings.style.apply(highlight_rank, axis=1)
+                                st.dataframe(styled_rankings, use_container_width=True)
+                            else:
+                                st.dataframe(rankings, use_container_width=True)
+                            
+                            csv_rank = rankings.to_csv(index=False, encoding='utf-8-sig')
+                            st.download_button(
+                                "📥 순위 CSV 다운로드",
+                                csv_rank,
+                                file_name=f"{agent_input}_순위.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
             
             # 다운로드 버튼
             col1, col2 = st.columns(2)

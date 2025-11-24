@@ -11,6 +11,24 @@ class DataParser:
     """매물 데이터 파서"""
     
     @staticmethod
+    def _is_new_article_line(line: str) -> bool:
+        """
+        새 매물의 시작을 나타내는 라인인지 판별
+        """
+        if not line:
+            return False
+        
+        normalized = line.replace(' ', '')
+        
+        if normalized.startswith('집주인'):
+            return True
+        
+        if re.search(r'\d+\s*동', line):
+            return True
+        
+        return False
+    
+    @staticmethod
     def split_articles(text: str) -> List[str]:
         """
         하나의 텍스트 블록을 개별 매물로 분리
@@ -34,12 +52,9 @@ class DataParser:
             if not line:
                 continue
             
-            # 새 매물 시작 감지
-            if '집주인' in line or '공인중개사' in line or line.endswith('동'):
-                # 이전 매물이 있으면 저장
+            if DataParser._is_new_article_line(line):
                 if current_article:
                     articles.append('\n'.join(current_article))
-                # 새 매물 시작
                 current_article = [line]
             else:
                 current_article.append(line)
@@ -74,6 +89,7 @@ class DataParser:
         complex_match = re.search(complex_pattern, text)
         if complex_match:
             data['단지명'] = complex_match.group(1).strip()
+            data['단지명'] = re.sub(r'^집주인\s*', '', data['단지명']).strip()
         
         # 동 정보 추출
         dong_pattern = r'(\d+동)'
@@ -86,6 +102,18 @@ class DataParser:
             data['구분'] = '집주인 직거래'
         elif '공인중개사' in text or '중개사' in text:
             data['구분'] = '공인중개사'
+        
+        # 공인중개사무소 이름 추출
+        agent_name = None
+        for line in text.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            if '공인중개사' in line and '확인매물' not in line:
+                agent_name = line
+                break
+        if agent_name:
+            data['공인중개사무소'] = agent_name
         
         # 거래 유형 추출
         if '매매' in text:
@@ -155,7 +183,7 @@ class DataParser:
         date_pattern = r'확인매물\s*([\d.]+)'
         date_match = re.search(date_pattern, text)
         if date_match:
-            data['확인일'] = date_match.group(1)
+            data['확인일'] = date_match.group(1).strip().rstrip('.')
         
         # 중개사 수 추출
         broker_pattern = r'중개사(\d+)곳'
@@ -209,7 +237,7 @@ class DataParser:
         columns_order = [
             '단지명', '동', '거래유형', '가격', '구분',
             '공급면적', '전용면적', '층', '총층수', '방향',
-            '확인일', '중개사수', '원문'
+            '확인일', '중개사수', '공인중개사무소', '원문'
         ]
         
         # 존재하는 컬럼만 선택
@@ -261,6 +289,75 @@ class DataParser:
             stats['동_개수'] = len(dong_counts)
         
         return stats
+
+    @staticmethod
+    def calculate_agent_rankings(
+        df: pd.DataFrame,
+        agent_name: str,
+        group_columns: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        """
+        동일 매물(공급면적/전용면적/층/총층수/방향) 그룹 내에서
+        지정한 공인중개사무소의 순위를 계산
+        
+        Args:
+            df (pd.DataFrame): 파싱된 매물 데이터프레임
+            agent_name (str): 관심 공인중개사무소 이름(부분 문자열 허용)
+            group_columns (List[str], optional): 그룹핑에 사용할 컬럼 목록
+        
+        Returns:
+            pd.DataFrame: 관심 공인중개사무소가 속한 매물과 순위 정보
+        """
+        if df is None or df.empty or not agent_name:
+            return pd.DataFrame()
+        
+        if group_columns is None:
+            group_columns = ['공급면적', '전용면적', '층', '총층수', '방향']
+        
+        required_columns = set(group_columns + ['공인중개사무소'])
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            return pd.DataFrame()
+        
+        # 그룹 기준 컬럼 결측치 처리 (정보없음으로 채움)
+        work_df = df.copy()
+        for column in group_columns:
+            if column not in work_df.columns:
+                return pd.DataFrame()
+            work_df[column] = work_df[column].fillna('정보없음')
+        
+        if '공인중개사무소' not in work_df.columns:
+            return pd.DataFrame()
+        
+        # 원본 순서를 유지하여 순위 계산
+        if '순번' in work_df.columns:
+            work_df = work_df.sort_values('순번')
+        else:
+            work_df = work_df.reset_index(drop=True)
+        
+        # 동일 매물 내 순위와 매물 수 계산
+        group_obj = work_df.groupby(group_columns, dropna=False)
+        size_target = '순번' if '순번' in work_df.columns else group_columns[0]
+        work_df['동일매물건수'] = group_obj[size_target].transform('size')
+        work_df['같은매물내순위'] = group_obj.cumcount() + 1
+        
+        # 관심 공인중개사무소 선택 (부분 문자열, 대소문자 무시)
+        agent_mask = work_df['공인중개사무소'].fillna('').str.contains(agent_name, case=False)
+        agent_df = work_df[agent_mask].copy()
+        
+        if agent_df.empty:
+            return pd.DataFrame()
+        
+        # 출력 컬럼 구성
+        output_columns = [
+            '순번', '단지명', '동', '거래유형', '가격',
+            *group_columns, '공인중개사무소', '확인일',
+            '같은매물내순위', '동일매물건수', '원문'
+        ]
+        existing_output_columns = [col for col in output_columns if col in agent_df.columns]
+        
+        result = agent_df[existing_output_columns].reset_index(drop=True)
+        return result
 
 
 if __name__ == "__main__":

@@ -161,7 +161,24 @@ chmod +x install_chrome.sh
 ./install_chrome.sh
 ```
 
-### 4. 메모리 부족
+### 4. Streamlit이 없음
+
+```bash
+# 가상환경 활성화
+cd ~/naver_real_estate
+source venv/bin/activate
+
+# Streamlit 설치 확인
+streamlit --version
+
+# Streamlit이 없으면 설치
+pip install streamlit==1.28.0
+
+# 또는 requirements.txt 전체 재설치
+pip install -r requirements.txt
+```
+
+### 5. 메모리 부족
 
 ```bash
 # 메모리 확인

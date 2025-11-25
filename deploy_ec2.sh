@@ -124,13 +124,25 @@ source venv/bin/activate
 # 7. pip 업그레이드 및 패키지 설치
 echo "📦 Python 패키지 설치 중..."
 pip install --upgrade pip
+echo "📦 requirements.txt에서 패키지 설치 중 (Streamlit 포함)..."
 pip install -r requirements.txt
 
-# 8. Chrome 버전 확인
+# 8. Streamlit 설치 확인
+echo "🔍 Streamlit 설치 확인..."
+if command -v streamlit &> /dev/null; then
+    streamlit --version || $PROJECT_DIR/venv/bin/streamlit --version
+    echo "✅ Streamlit 설치 확인 완료"
+else
+    echo "⚠️  Streamlit을 찾을 수 없습니다. 재설치 시도..."
+    pip install streamlit==1.28.0
+    streamlit --version || echo "❌ Streamlit 설치 실패"
+fi
+
+# 9. Chrome 버전 확인
 echo "🔍 Chrome 버전 확인..."
 google-chrome --version || echo "⚠️  Chrome 실행 확인 필요"
 
-# 9. systemd 서비스 파일 생성
+# 10. systemd 서비스 파일 생성
 echo "⚙️  systemd 서비스 설정 중..."
 sudo tee /etc/systemd/system/naver-streamlit.service > /dev/null <<EOF
 [Unit]
@@ -152,7 +164,7 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-# 10. 방화벽 설정 (필요시)
+# 11. 방화벽 설정 (필요시)
 echo "🔥 방화벽 설정 확인 중..."
 if command -v firewall-cmd &> /dev/null; then
     sudo firewall-cmd --permanent --add-port=8501/tcp
@@ -160,13 +172,13 @@ if command -v firewall-cmd &> /dev/null; then
     echo "✅ 방화벽 포트 8501 열림"
 fi
 
-# 11. systemd 서비스 활성화
+# 12. systemd 서비스 활성화
 echo "🔄 systemd 서비스 활성화 중..."
 sudo systemctl daemon-reload
 sudo systemctl enable naver-streamlit
 sudo systemctl start naver-streamlit
 
-# 12. 서비스 상태 확인
+# 13. 서비스 상태 확인
 echo "📊 서비스 상태 확인 중..."
 sleep 3
 sudo systemctl status naver-streamlit --no-pager || true

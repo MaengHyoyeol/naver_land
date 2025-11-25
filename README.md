@@ -169,10 +169,29 @@ naver_real_estate/
 - [x] CSV/Excel 저장
 - [x] 실제 작동 검증 완료 ✅
 
+## ☁️ EC2 배포
+
+Amazon Linux 2023에 배포하는 방법은 [EC2_DEPLOYMENT.md](./EC2_DEPLOYMENT.md)를 참고하세요.
+
+### 빠른 배포
+```bash
+# EC2에 SSH 접속 후
+git clone <your-repo-url>
+cd naver_real_estate
+chmod +x deploy_ec2.sh
+./deploy_ec2.sh
+```
+
+자동으로 다음이 설정됩니다:
+- Chrome 및 의존성 설치
+- Python 가상환경 설정
+- systemd 서비스 등록
+- 자동 재시작 설정
+
 ## 📄 라이선스
 교육 및 개인 프로젝트 목적
 
 ## 👤 작성 정보
 - 프로젝트 생성일: 2025-11-19
-- 최종 업데이트: 2025-11-19 (undetected-chromedriver 적용)
-- ChromeDriver 경로: `/opt/homebrew/bin/chromedriver`
+- 최종 업데이트: 2025-11-24 (EC2 배포 지원 추가)
+- ChromeDriver 경로: `/opt/homebrew/bin/chromedriver` (로컬), 자동 설치 (EC2)

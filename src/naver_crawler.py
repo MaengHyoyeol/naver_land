@@ -12,10 +12,17 @@ import time
 import pandas as pd
 from typing import Dict, List, Optional
 import re
+import random
 
 
 class NaverRealEstateCrawler:
     """네이버 부동산 크롤러 (undetected_chromedriver 사용)"""
+    
+    USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
+    ]
     
     def __init__(self, headless: bool = False):
         """
@@ -31,6 +38,26 @@ class NaverRealEstateCrawler:
         """WebDriver 초기화 (봇 탐지 우회)"""
         try:
             options = uc.ChromeOptions()
+            
+            # 봇 탐지 회피를 위한 옵션
+            user_agent = random.choice(self.USER_AGENTS)
+            options.add_argument(f'--user-agent={user_agent}')
+            options.add_argument('--disable-blink-features=AutomationControlled')
+            options.add_argument('--disable-infobars')
+            options.add_argument('--lang=ko-KR')
+            options.add_argument('--start-maximized')
+            options.add_argument('--no-first-run')
+            options.add_argument('--no-default-browser-check')
+            options.add_argument('--disable-notifications')
+            options.add_argument('--disable-popup-blocking')
+            options.add_argument('--window-size=1920,1080')
+            prefs = {
+                "profile.default_content_setting_values.notifications": 2,
+                "credentials_enable_service": False,
+                "profile.password_manager_enabled": False,
+            }
+            options.add_experimental_option("prefs", prefs)
+            
             if self.headless:
                 options.add_argument('--headless')
             

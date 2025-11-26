@@ -184,24 +184,42 @@ class DataParser:
                     data['전용면적'] = area_match.group(1) + 'm²'
                 break
         
-        # 층 추출 ("1/31층" 형식)
-        floor_pattern = r'(\d+)/(\d+)\s*층'
+        # 층 추출 ("1/31층", "저/29층", "고/29층", "중/29층" 형식)
+        # "저/29층" 형식: 저는 저층(층 컬럼), 29는 총층수(총층수 컬럼)
+        # "고/29층" 형식: 고는 고층(층 컬럼), 29는 총층수(총층수 컬럼)
+        # "중/29층" 형식: 중은 중층(층 컬럼), 29는 총층수(총층수 컬럼)
+        floor_pattern = r'(저|고|중|\d+)/(\d+)\s*층'
         floor_match = re.search(floor_pattern, text)
         if floor_match:
-            data['층'] = floor_match.group(1) + '층'
-            data['총층수'] = floor_match.group(2) + '층'
+            floor_part = floor_match.group(1)
+            total_floor = floor_match.group(2)
+            
+            # "저"를 "저층", "고"를 "고층", "중"을 "중층"으로 변환, 숫자는 "층" 추가
+            if floor_part == '저':
+                data['층'] = '저층'
+            elif floor_part == '고':
+                data['층'] = '고층'
+            elif floor_part == '중':
+                data['층'] = '중층'
+            else:
+                data['층'] = floor_part + '층'
+            
+            # 총층수는 항상 "층" 추가
+            data['총층수'] = total_floor + '층'
         else:
-            # 단순 "15층" 형식
+            # 단순 "15층" 형식 (총층수 정보 없음)
             simple_floor = re.search(r'(\d+)\s*층', text)
             if simple_floor:
+                # 총층수 정보가 없으면 층만 저장
                 data['층'] = simple_floor.group(1) + '층'
         
-        # 방향 추출
-        direction_keywords = ['남향', '북향', '동향', '서향', '남동향', '남서향', '북동향', '북서향']
-        for direction in direction_keywords:
-            if direction in text:
-                data['방향'] = direction
-                break
+        # 방향 추출 - 원문 그대로 저장
+        # "~향" 패턴으로 방향 추출 (남성향, 남향, 서향 등 모든 방향 포함)
+        direction_pattern = r'([남북동서]+[성]?향)'
+        direction_match = re.search(direction_pattern, text)
+        if direction_match:
+            # 원문 그대로 저장
+            data['방향'] = direction_match.group(1)
         
         # 확인 날짜 추출
         date_pattern = r'확인매물\s*([\d.]+)'

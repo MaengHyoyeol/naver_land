@@ -313,10 +313,14 @@ def main():
                 st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 → 중복 제거 후: {after_dedup_count}개 (전체: {original_count}개)")
             else:
                 st.info(f"📊 전체 데이터: {original_count}개 → 중복 제거 후: {after_dedup_count}개")
+            # 순번 컬럼 제거
+            if '순번' in df_filtered.columns:
+                df_filtered = df_filtered.drop(columns=['순번'])
+            
             preferred_order = [
-                '순번', '단지명', '동', '거래유형', '가격', '구분',
-                '공급면적', '전용면적', '층', '총층수', '방향',
-                '확인일', '중개사수', '공인중개사무소', '원문'
+                '단지명', '동', '층', '총층수', '방향',
+                '거래유형', '가격', '전용면적', '공급면적',
+                '확인일', '공인중개사무소', '원문', '구분'
             ]
             display_cols = [col for col in preferred_order if col in df_filtered.columns]
             if display_cols:

@@ -135,21 +135,36 @@ class DataParser:
             return None  # 거래유형 없으면 유효하지 않은 데이터
         
         # 가격 추출 개선
-        # "매매16억", "매매17억 6,000", "매매18억 5,000~20억" 등
-        price_patterns = [
-            r'매매\s*(\d+억[\s,0-9~]+(?:억)?)',
-            r'전세\s*(\d+억[\s,0-9~]+(?:억)?)',
-            r'월세\s*(\d+억[\s,0-9~/]+)',
-        ]
+        # 형식 1: "매매16억", "매매17억 6,000", "전세5억" 등 (억 단위)
+        # 형식 2: "월세 5,000/150" (월세 보증금/월세 형식)
+        price_text = None
         
-        for pattern in price_patterns:
-            price_match = re.search(pattern, text)
-            if price_match:
-                price_text = price_match.group(1).strip()
-                # 줄바꿈 제거
-                price_text = price_text.split('\n')[0].strip()
-                data['가격'] = price_text
-                break
+        # 먼저 월세 형식 확인 (5,000/150 형식)
+        if data['거래유형'] == '월세':
+            # "월세 5,000/150" 또는 "월세5,000/150" 형식
+            monthly_pattern = r'월세\s*([\d,]+/[\d,]+)'
+            monthly_match = re.search(monthly_pattern, text)
+            if monthly_match:
+                price_text = monthly_match.group(1).strip()
+        
+        # 억 단위 가격 형식 (매매, 전세, 월세 모두)
+        if not price_text:
+            price_patterns = [
+                r'매매\s*(\d+억[\s,0-9~]+(?:억)?)',
+                r'전세\s*(\d+억[\s,0-9~]+(?:억)?)',
+                r'월세\s*(\d+억[\s,0-9~/]+)',
+            ]
+            
+            for pattern in price_patterns:
+                price_match = re.search(pattern, text)
+                if price_match:
+                    price_text = price_match.group(1).strip()
+                    # 줄바꿈 제거
+                    price_text = price_text.split('\n')[0].strip()
+                    break
+        
+        if price_text:
+            data['가격'] = price_text
         
         # 면적 추출 ("149/120m²" 형식 또는 "110C/84m²")
         area_patterns = [

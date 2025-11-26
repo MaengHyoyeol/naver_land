@@ -124,6 +124,20 @@ class DataParser:
         if agent_name:
             data['공인중개사무소'] = agent_name
         
+        # 광고사 추출 (5번째 줄의 "*제공" 정보)
+        lines = text.split('\n')
+        if len(lines) >= 5:
+            fifth_line = lines[4].strip()  # 5번째 줄 (인덱스 4)
+            if '제공' in fifth_line:
+                # "*매경부동산 제공" 또는 "매경부동산 제공" 형식
+                # "*" 제거하고 "제공" 앞의 텍스트 추출
+                provider_text = fifth_line.replace('*', '').strip()
+                if '제공' in provider_text:
+                    # "제공" 앞의 텍스트가 광고사명
+                    provider_name = provider_text.split('제공')[0].strip()
+                    if provider_name:
+                        data['광고사'] = provider_name
+        
         # 거래 유형 추출
         if '매매' in text:
             data['거래유형'] = '매매'
@@ -339,7 +353,7 @@ class DataParser:
         group_columns: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
-        동일 매물(공급면적/전용면적/층/총층수/방향) 그룹 내에서
+        동일 매물(동/층/총층수/거래유형/전용면적/공급면적) 그룹 내에서
         지정한 공인중개사무소의 순위를 계산
         
         Args:
@@ -354,7 +368,7 @@ class DataParser:
             return pd.DataFrame()
         
         if group_columns is None:
-            group_columns = ['공급면적', '전용면적', '층', '총층수', '방향']
+            group_columns = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적']
         
         required_columns = set(group_columns + ['공인중개사무소'])
         missing_columns = [col for col in required_columns if col not in df.columns]

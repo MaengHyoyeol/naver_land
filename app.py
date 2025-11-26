@@ -64,7 +64,7 @@ def main():
     with st.sidebar:
         st.header("⚙️ 설정")
         
-        headless_mode = st.checkbox("헤드리스 모드 (브라우저 숨김)", value=False)
+        headless_mode = st.checkbox("헤드리스 모드 (브라우저 숨김)", value=True)
         
         st.markdown("---")
         st.markdown("### 📊 기능")

@@ -85,11 +85,20 @@ class DataParser:
             return None
         
         # 단지명 추출
-        complex_pattern = r'(영등포\s*아트자이|[\w\s]+아파트|[\w\s]+단지)'
-        complex_match = re.search(complex_pattern, text)
-        if complex_match:
-            data['단지명'] = complex_match.group(1).strip()
-            data['단지명'] = re.sub(r'^집주인\s*', '', data['단지명']).strip()
+        # 첫 줄을 확인하여 단지명 추출
+        lines = text.split('\n')
+        first_line = lines[0].strip() if lines else text.strip()
+        
+        if first_line.startswith('집주인'):
+            # "집주인xxxx"에서 "xxxx"가 단지명
+            complex_name = first_line.replace('집주인', '', 1).strip()
+            # 첫 단어 또는 공백 전까지가 단지명
+            complex_name = complex_name.split()[0] if complex_name.split() else complex_name
+            data['단지명'] = complex_name
+        else:
+            # "집주인"으로 시작하지 않으면 첫 단어가 단지명
+            first_word = first_line.split()[0] if first_line.split() else first_line
+            data['단지명'] = first_word
         
         # 동 정보 추출
         dong_pattern = r'(\d+동)'

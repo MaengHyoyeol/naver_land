@@ -98,3 +98,4 @@ echo "  google-chrome --version"
 echo "  또는"
 echo "  /usr/bin/google-chrome --version"
 
+

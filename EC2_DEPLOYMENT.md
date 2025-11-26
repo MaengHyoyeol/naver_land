@@ -318,3 +318,4 @@ sudo certbot --nginx -d your-domain.com
 3. `google-chrome --version` - Chrome 설치 확인
 4. AWS 콘솔의 보안 그룹 설정
 
+

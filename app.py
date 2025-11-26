@@ -257,6 +257,8 @@ def main():
             
             # 필터링
             df_filtered = df.copy()
+            original_count = len(df_filtered)
+            
             if selected_type != '전체':
                 df_filtered = df_filtered[df_filtered['거래유형'] == selected_type]
             if selected_dong != '전체':
@@ -267,10 +269,14 @@ def main():
                 df_filtered = df_filtered[df_filtered['확인일'] == selected_date]
             if selected_agent != '전체':
                 df_filtered = df_filtered[df_filtered['공인중개사무소'] == selected_agent]
+            
+            filtered_count = len(df_filtered)
 
             # 동일 매물 중 최신 확인일만 유지
-            dedup_key = ['가격', '공급면적', '전용면적', '층', '총층수', '방향', '공인중개사무소']
+            # 같은 매물 제거 기준: 가격, 공급면적, 전용면적, 층, 총층수, 방향, 공인중개사무소가 모두 같은 경우
+            dedup_key = ['가격', '공급면적', '전용면적', '층', '총층수', '방향', '공인중개사무소', '확인일']
             if all(col in df_filtered.columns for col in dedup_key) and '확인일' in df_filtered.columns:
+                before_dedup_count = len(df_filtered)
                 df_dedup = df_filtered.copy()
                 parsed_dates = pd.to_datetime(
                     df_dedup['확인일'].astype(str).str.replace('.', '-', regex=False),
@@ -282,9 +288,31 @@ def main():
                 df_dedup = df_dedup.drop_duplicates(subset=dedup_key, keep='first')
                 df_dedup = df_dedup.drop(columns=['_확인일_dt'])
                 df_filtered = df_dedup.reset_index(drop=True)
+                after_dedup_count = len(df_filtered)
+            else:
+                before_dedup_count = filtered_count
+                after_dedup_count = filtered_count
             
             st.markdown("---")
             st.subheader("📊 필터링된 데이터")
+            
+            # 필터링 정보 표시
+            filter_info = []
+            if selected_type != '전체':
+                filter_info.append(f"거래유형: {selected_type}")
+            if selected_dong != '전체':
+                filter_info.append(f"동: {selected_dong}")
+            if selected_direction != '전체':
+                filter_info.append(f"방향: {selected_direction}")
+            if selected_date != '전체':
+                filter_info.append(f"확인일: {selected_date}")
+            if selected_agent != '전체':
+                filter_info.append(f"공인중개사무소: {selected_agent}")
+            
+            if filter_info:
+                st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 → 중복 제거 후: {after_dedup_count}개 (전체: {original_count}개)")
+            else:
+                st.info(f"📊 전체 데이터: {original_count}개 → 중복 제거 후: {after_dedup_count}개")
             preferred_order = [
                 '순번', '단지명', '동', '거래유형', '가격', '구분',
                 '공급면적', '전용면적', '층', '총층수', '방향',

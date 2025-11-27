@@ -86,7 +86,7 @@ def main():
         st.markdown("---")
         st.markdown("### ℹ️ 정보")
         st.markdown("""
-        **버전**: v2.0.0  
+        **버전**: v2.1.0  
         **브랜치**: develop
         """)
     
@@ -418,6 +418,9 @@ def main():
                                 rankings_display = pd.DataFrame(combined_rankings[rank_display_cols].values, columns=rank_display_cols)
                                 rankings_display = rankings_display.reset_index(drop=True)
                                 
+                                # 같은 매물 찾기 기준
+                                same_property_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적']
+                                
                                 if '같은매물내순위' in rankings_display.columns:
                                     def highlight_rank(row):
                                         rank_value = row.get('같은매물내순위')
@@ -429,6 +432,86 @@ def main():
                                     st.dataframe(styled_rankings, use_container_width=True)
                                 else:
                                     st.dataframe(rankings_display, use_container_width=True)
+                                
+                                # 각 행에 대한 같은 매물 보기 기능
+                                st.markdown("---")
+                                st.subheader("🔍 각 매물의 같은 매물 목록")
+                                st.info("아래에서 인덱스를 클릭하여 같은 매물들을 확인할 수 있습니다.")
+                                
+                                # 각 행을 반복하면서 expander 추가
+                                for idx, row in combined_rankings.iterrows():
+                                    # 같은 매물 찾기 (필터링된 데이터에서 찾기)
+                                    same_property_mask = pd.Series(True, index=df_filtered.index)
+                                    
+                                    for key in same_property_key:
+                                        if key in row.index and key in df_filtered.columns:
+                                            row_value = row[key]
+                                            # NaN 값 처리
+                                            if pd.isna(row_value):
+                                                same_property_mask = same_property_mask & df_filtered[key].isna()
+                                            else:
+                                                same_property_mask = same_property_mask & (df_filtered[key] == row_value)
+                                    
+                                    same_properties = df_filtered[same_property_mask].copy()
+                                    
+                                    # 현재 매물의 공인중개사무소 (강조용)
+                                    current_agent = row.get('공인중개사무소', '') if '공인중개사무소' in row.index else ''
+                                    
+                                    # Expander 제목 생성
+                                    property_info = []
+                                    for col in ['단지명', '동', '층', '거래유형']:
+                                        if col in row.index and pd.notna(row.get(col)):
+                                            property_info.append(str(row[col]))
+                                    
+                                    expander_title = f"📌 인덱스 {idx + 1}: {' | '.join(property_info[:3])}"
+                                    if '같은매물내순위' in row.index and pd.notna(row.get('같은매물내순위')):
+                                        expander_title += f" (순위: {int(row['같은매물내순위'])}, 동일 매물: {len(same_properties)}개)"
+                                    
+                                    with st.expander(expander_title, expanded=False):
+                                        if len(same_properties) > 0:
+                                            # 표시할 컬럼 선택
+                                            display_cols_for_same = [
+                                                '단지명', '동', '층', '총층수', '방향',
+                                                '거래유형', '가격', '전용면적', '공급면적',
+                                                '확인일', '공인중개사무소', '광고사', '원문'
+                                            ]
+                                            existing_display_cols = [col for col in display_cols_for_same if col in same_properties.columns]
+                                            
+                                            # 현재 매물 강조 표시 함수
+                                            def highlight_current_property(compare_row):
+                                                styles = [''] * len(compare_row)
+                                                
+                                                # 현재 행의 공인중개사무소와 같은 매물 강조
+                                                if '공인중개사무소' in compare_row.index and current_agent:
+                                                    compare_agent = str(compare_row.get('공인중개사무소', ''))
+                                                    if compare_agent and current_agent in compare_agent:
+                                                        return ['background-color: #fff4cd; font-weight: bold'] * len(compare_row)
+                                                
+                                                return styles
+                                            
+                                            # 정렬: 확인일 기준 내림차순 (최신순)
+                                            if '확인일' in same_properties.columns:
+                                                try:
+                                                    same_properties_sorted = same_properties.copy()
+                                                    parsed_dates = pd.to_datetime(
+                                                        same_properties_sorted['확인일'].astype(str).str.replace('.', '-', regex=False),
+                                                        format='%y-%m-%d',
+                                                        errors='coerce'
+                                                    )
+                                                    same_properties_sorted['_sort_date'] = parsed_dates
+                                                    same_properties_sorted = same_properties_sorted.sort_values('_sort_date', ascending=False, na_position='last')
+                                                    same_properties_sorted = same_properties_sorted.drop(columns=['_sort_date'])
+                                                    same_properties = same_properties_sorted
+                                                except:
+                                                    pass
+                                            
+                                            styled_same = same_properties[existing_display_cols].style.apply(
+                                                highlight_current_property, axis=1
+                                            )
+                                            st.dataframe(styled_same, use_container_width=True)
+                                            st.caption(f"✅ 총 {len(same_properties)}개의 같은 매물 | 노란색 강조: 현재 공인중개사무소 ({current_agent})")
+                                        else:
+                                            st.info("⚠️ 같은 매물을 찾을 수 없습니다.")
                                 
                                 csv_rank = combined_rankings.to_csv(index=False, encoding='utf-8-sig')
                                 agent_names_str = "_".join([name[:10] for name in agent_names[:3]])  # 파일명용

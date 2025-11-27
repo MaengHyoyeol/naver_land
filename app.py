@@ -86,7 +86,7 @@ def main():
         st.markdown("---")
         st.markdown("### ℹ️ 정보")
         st.markdown("""
-        **버전**: v2.1.1  
+        **버전**: v2.1.2  
         **브랜치**: develop
         """)
     

@@ -3,7 +3,7 @@
 undetected_chromedriver 기반 실제 작동 크롤러
 """
 
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 __author__ = "Your Name"
 
 from .naver_crawler import NaverRealEstateCrawler

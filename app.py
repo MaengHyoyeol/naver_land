@@ -192,6 +192,117 @@ def main():
                             st.rerun()  # 페이지 새로고침하여 분석 탭에 표시
                         else:
                             st.warning("⚠️ 파싱된 데이터가 없습니다.")
+                
+                # 단지 추가검색 섹션
+                st.markdown("---")
+                st.subheader("➕ 단지 추가검색")
+                st.info("현재 데이터에 다른 단지의 매물을 추가로 수집할 수 있습니다.")
+                
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    additional_keyword = st.text_input(
+                        "추가 검색할 단지명을 입력하세요",
+                        placeholder="예: 래미안 아파트",
+                        key="additional_search_keyword"
+                    )
+                
+                with col2:
+                    st.write("")  # 공간 맞추기
+                    additional_search_button = st.button("➕ 추가 검색", type="primary", use_container_width=True)
+                
+                if additional_search_button:
+                    if not additional_keyword:
+                        st.error("❌ 추가 검색할 단지명을 입력해주세요.")
+                    else:
+                        with st.spinner(f"'{additional_keyword}' 추가 크롤링 중... (1~3분 소요)"):
+                            # 진행 상황 표시
+                            additional_progress_bar = st.progress(0)
+                            additional_status_text = st.empty()
+                            
+                            # 기존 크롤러가 있으면 사용, 없으면 새로 생성
+                            if 'crawler' not in st.session_state or st.session_state.crawler is None:
+                                crawler = NaverRealEstateCrawler(headless=headless_mode)
+                                st.session_state.crawler = crawler
+                            else:
+                                crawler = st.session_state.crawler
+                            
+                            try:
+                                additional_status_text.text(f"🔍 '{additional_keyword}' 검색 중...")
+                                additional_progress_bar.progress(10)
+                                
+                                # 추가 크롤링 실행
+                                df_additional = crawler.crawl(additional_keyword)
+                                
+                                additional_progress_bar.progress(70)
+                                additional_status_text.text("📊 데이터 처리 중...")
+                                
+                                if df_additional is not None and not df_additional.empty:
+                                    # 기존 데이터와 병합
+                                    # 순번 재설정
+                                    existing_count = len(df_raw)
+                                    df_additional = df_additional.copy()
+                                    df_additional['순번'] = range(existing_count + 1, existing_count + 1 + len(df_additional))
+                                    
+                                    # 원본 데이터 병합
+                                    df_merged = pd.concat([df_raw, df_additional], ignore_index=True)
+                                    
+                                    # 세션에 업데이트된 원본 데이터 저장
+                                    st.session_state.df_raw = df_merged
+                                    if 'keyword' in st.session_state:
+                                        existing_keywords = st.session_state.keyword.split(', ') if ', ' in st.session_state.keyword else [st.session_state.keyword]
+                                        if additional_keyword not in existing_keywords:
+                                            st.session_state.keyword = ', '.join(existing_keywords + [additional_keyword])
+                                    else:
+                                        st.session_state.keyword = additional_keyword
+                                    
+                                    # 추가 데이터 자동 파싱
+                                    additional_status_text.text("🔍 추가 데이터 파싱 중...")
+                                    additional_progress_bar.progress(85)
+                                    
+                                    parser = DataParser()
+                                    df_additional_parsed = parser.parse_dataframe(df_additional)
+                                    
+                                    if not df_additional_parsed.empty:
+                                        # 기존 파싱 데이터와 병합
+                                        if 'df_parsed' in st.session_state and st.session_state.df_parsed is not None:
+                                            df_parsed_merged = pd.concat([st.session_state.df_parsed, df_additional_parsed], ignore_index=True)
+                                            st.session_state.df_parsed = df_parsed_merged
+                                        else:
+                                            # 기존 파싱 데이터가 없으면 새로 생성
+                                            st.session_state.df_parsed = df_additional_parsed
+                                        
+                                        additional_progress_bar.progress(100)
+                                        additional_status_text.text("✅ 모든 작업 완료!")
+                                        
+                                        # 성공 메시지
+                                        st.success(f"✅ '{additional_keyword}' 추가 검색 완료! ({len(df_additional)}개 매물 추가, 총 {len(df_merged)}개, 파싱 완료: {len(df_additional_parsed)}개)")
+                                    else:
+                                        additional_progress_bar.progress(100)
+                                        additional_status_text.text("⚠️ 파싱 경고")
+                                        st.warning(f"⚠️ '{additional_keyword}' 추가 검색 완료! ({len(df_additional)}개 매물 추가, 총 {len(df_merged)}개) 단, 파싱된 데이터가 없습니다.")
+                                        # 파싱 실패해도 원본 데이터는 병합됨
+                                    
+                                    # 추가 검색 결과를 기존 데이터 아래에 표시
+                                    st.markdown("---")
+                                    st.markdown(f"#### ➕ '{additional_keyword}' 추가 검색 결과")
+                                    st.dataframe(df_additional.head(20), use_container_width=True)
+                                    st.info(f"📊 추가된 매물: {len(df_additional)}개")
+                                else:
+                                    additional_progress_bar.progress(100)
+                                    additional_status_text.text("⚠️ 데이터 없음")
+                                    st.error(f"❌ **'{additional_keyword}' 추가 검색 실패**\n\n"
+                                            f"⚠️ 추가 검색된 데이터가 없습니다.\n"
+                                            f"단지명을 확인하거나 다시 시도해주세요.")
+                                    
+                            except Exception as e:
+                                additional_progress_bar.progress(100)
+                                additional_status_text.text("❌ 오류 발생")
+                                st.error(f"❌ **'{additional_keyword}' 추가 검색 오류 발생**\n\n"
+                                        f"오류 내용: {e}")
+                                import traceback
+                                with st.expander("상세 오류 정보"):
+                                    st.code(traceback.format_exc())
             else:
                 st.warning("⚠️ 수집된 데이터가 비어있습니다.")
     

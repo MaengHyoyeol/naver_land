@@ -533,11 +533,53 @@ def main():
                                 same_property_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적']
                                 
                                 if '같은매물내순위' in rankings_display.columns:
-                                    def highlight_rank(row):
-                                        rank_value = row.get('같은매물내순위')
-                                        if pd.notna(rank_value) and rank_value >= 3:
-                                            return ['background-color: #ffe5e5'] * len(row)
-                                        return [''] * len(row)
+                                    # 여러 공인중개사무소가 입력된 경우, 같은 매물 내 최소 순위 계산
+                                    if len(agent_names) > 1:
+                                        # 같은 매물 그룹별로 최소 순위 계산
+                                        min_rank_by_property = {}
+                                        
+                                        for idx, row in combined_rankings.iterrows():
+                                            # 같은 매물 그룹 키 생성
+                                            property_key_parts = []
+                                            for key_col in same_property_key:
+                                                if key_col in row.index:
+                                                    val = row[key_col]
+                                                    property_key_parts.append(str(val) if pd.notna(val) else 'None')
+                                            
+                                            property_key = tuple(property_key_parts)
+                                            rank_value = row.get('같은매물내순위')
+                                            
+                                            if pd.notna(rank_value):
+                                                # 같은 매물 그룹에서 최소 순위 저장
+                                                if property_key in min_rank_by_property:
+                                                    min_rank_by_property[property_key] = min(
+                                                        min_rank_by_property[property_key], 
+                                                        rank_value
+                                                    )
+                                                else:
+                                                    min_rank_by_property[property_key] = rank_value
+                                        
+                                        # 하이라이트 함수: 같은 매물 그룹의 최소 순위가 3 이상이면 하이라이트
+                                        def highlight_rank(row):
+                                            property_key_parts = []
+                                            for key_col in same_property_key:
+                                                if key_col in row.index:
+                                                    val = row[key_col]
+                                                    property_key_parts.append(str(val) if pd.notna(val) else 'None')
+                                            
+                                            property_key = tuple(property_key_parts)
+                                            min_rank = min_rank_by_property.get(property_key, 0)
+                                            
+                                            if min_rank >= 3:
+                                                return ['background-color: #ffe5e5'] * len(row)
+                                            return [''] * len(row)
+                                    else:
+                                        # 단일 공인중개사무소인 경우 기존 로직
+                                        def highlight_rank(row):
+                                            rank_value = row.get('같은매물내순위')
+                                            if pd.notna(rank_value) and rank_value >= 3:
+                                                return ['background-color: #ffe5e5'] * len(row)
+                                            return [''] * len(row)
                                     
                                     styled_rankings = rankings_display.style.apply(highlight_rank, axis=1)
                                     st.dataframe(styled_rankings, use_container_width=True)

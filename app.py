@@ -10,6 +10,7 @@ import sys
 import os
 from datetime import datetime
 import time
+import re
 
 # 프로젝트 경로 추가
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -529,6 +530,43 @@ def main():
                                 rankings_display = pd.DataFrame(combined_rankings[rank_display_cols].values, columns=rank_display_cols)
                                 rankings_display = rankings_display.reset_index(drop=True)
                                 
+                                # 정렬: 동, 층, 같은매물내순위 순서
+                                rankings_display_sorted = rankings_display.copy()
+                                
+                                # 동 정렬 (숫자 추출)
+                                if '동' in rankings_display_sorted.columns:
+                                    rankings_display_sorted['_sort_dong'] = rankings_display_sorted['동'].astype(str).apply(
+                                        lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                                    )
+                                else:
+                                    rankings_display_sorted['_sort_dong'] = 999
+                                
+                                # 층 정렬 (숫자 추출)
+                                if '층' in rankings_display_sorted.columns:
+                                    rankings_display_sorted['_sort_floor'] = rankings_display_sorted['층'].astype(str).apply(
+                                        lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                                    )
+                                else:
+                                    rankings_display_sorted['_sort_floor'] = 999
+                                
+                                # 같은매물내순위 정렬
+                                if '같은매물내순위' in rankings_display_sorted.columns:
+                                    rankings_display_sorted['_sort_rank'] = pd.to_numeric(rankings_display_sorted['같은매물내순위'], errors='coerce').fillna(999)
+                                else:
+                                    rankings_display_sorted['_sort_rank'] = 999
+                                
+                                # 정렬 실행: 동, 층, 순위
+                                rankings_display_sorted = rankings_display_sorted.sort_values(
+                                    ['_sort_dong', '_sort_floor', '_sort_rank'],
+                                    ascending=[True, True, True]
+                                )
+                                
+                                # 정렬용 임시 컬럼 제거
+                                rankings_display_sorted = rankings_display_sorted.drop(
+                                    columns=[col for col in ['_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display_sorted.columns]
+                                )
+                                rankings_display = rankings_display_sorted.reset_index(drop=True)
+                                
                                 # 같은 매물 찾기 기준
                                 same_property_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적']
                                 
@@ -632,11 +670,48 @@ def main():
                                 st.subheader("🔍 각 매물의 같은 매물 목록")
                                 st.info("아래에서 인덱스를 클릭하여 같은 매물들을 확인할 수 있습니다.")
                                 
+                                # expander 항목들을 동, 층, 순위로 정렬
+                                combined_rankings_sorted = combined_rankings.copy()
+                                
+                                # 동 정렬 (숫자 추출)
+                                if '동' in combined_rankings_sorted.columns:
+                                    combined_rankings_sorted['_sort_dong'] = combined_rankings_sorted['동'].astype(str).apply(
+                                        lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                                    )
+                                else:
+                                    combined_rankings_sorted['_sort_dong'] = 999
+                                
+                                # 층 정렬 (숫자 추출)
+                                if '층' in combined_rankings_sorted.columns:
+                                    combined_rankings_sorted['_sort_floor'] = combined_rankings_sorted['층'].astype(str).apply(
+                                        lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                                    )
+                                else:
+                                    combined_rankings_sorted['_sort_floor'] = 999
+                                
+                                # 같은매물내순위 정렬
+                                if '같은매물내순위' in combined_rankings_sorted.columns:
+                                    combined_rankings_sorted['_sort_rank'] = pd.to_numeric(combined_rankings_sorted['같은매물내순위'], errors='coerce').fillna(999)
+                                else:
+                                    combined_rankings_sorted['_sort_rank'] = 999
+                                
+                                # 정렬 실행: 동, 층, 순위
+                                combined_rankings_sorted = combined_rankings_sorted.sort_values(
+                                    ['_sort_dong', '_sort_floor', '_sort_rank'],
+                                    ascending=[True, True, True]
+                                )
+                                
+                                # 정렬용 임시 컬럼 제거
+                                combined_rankings_sorted = combined_rankings_sorted.drop(
+                                    columns=[col for col in ['_sort_dong', '_sort_floor', '_sort_rank'] if col in combined_rankings_sorted.columns]
+                                )
+                                combined_rankings_sorted = combined_rankings_sorted.reset_index(drop=True)
+                                
                                 # 이미 표시한 같은 매물 그룹 추적
                                 shown_property_groups = set()
                                 
-                                # 각 행을 반복하면서 expander 추가
-                                for idx, row in combined_rankings.iterrows():
+                                # 각 행을 반복하면서 expander 추가 (정렬된 순서로)
+                                for idx, row in combined_rankings_sorted.iterrows():
                                     # 같은 매물 그룹 키 생성 (중복 체크용)
                                     property_group_key_parts = []
                                     for key in same_property_key:
@@ -681,13 +756,116 @@ def main():
                                     
                                     with st.expander(expander_title, expanded=False):
                                         if len(same_properties) > 0:
+                                            # 같은 매물 목록에 순위 계산 (없으면 계산)
+                                            if '같은매물내순위' not in same_properties.columns or '동일매물건수' not in same_properties.columns:
+                                                same_properties_with_rank = same_properties.copy()
+                                                
+                                                # 그룹 기준 컬럼 결측치 처리
+                                                for key_col in same_property_key:
+                                                    if key_col in same_properties_with_rank.columns:
+                                                        same_properties_with_rank[key_col] = same_properties_with_rank[key_col].fillna('정보없음')
+                                                
+                                                # 같은 매물 그룹 내 순위 계산
+                                                if all(col in same_properties_with_rank.columns for col in same_property_key):
+                                                    # 동일매물건수 계산
+                                                    group_obj = same_properties_with_rank.groupby(same_property_key, dropna=False)
+                                                    size_target = '순번' if '순번' in same_properties_with_rank.columns else same_property_key[0]
+                                                    same_properties_with_rank['동일매물건수'] = group_obj[size_target].transform('size')
+                                                    
+                                                    # 동, 층, 확인일 기준으로 정렬 후 순위 계산
+                                                    sort_columns = []
+                                                    sort_ascending = []
+                                                    
+                                                    # 동 정렬
+                                                    if '동' in same_properties_with_rank.columns:
+                                                        same_properties_with_rank['_sort_dong'] = same_properties_with_rank['동'].astype(str).apply(
+                                                            lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                                                        )
+                                                        sort_columns.append('_sort_dong')
+                                                        sort_ascending.append(True)
+                                                    
+                                                    # 층 정렬
+                                                    if '층' in same_properties_with_rank.columns:
+                                                        same_properties_with_rank['_sort_floor'] = same_properties_with_rank['층'].astype(str).apply(
+                                                            lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                                                        )
+                                                        sort_columns.append('_sort_floor')
+                                                        sort_ascending.append(True)
+                                                    
+                                                    # 확인일 기준으로 정렬 (최신순)
+                                                    if '확인일' in same_properties_with_rank.columns:
+                                                        try:
+                                                            parsed_dates = pd.to_datetime(
+                                                                same_properties_with_rank['확인일'].astype(str).str.replace('.', '-', regex=False),
+                                                                format='%y-%m-%d',
+                                                                errors='coerce'
+                                                            )
+                                                            same_properties_with_rank['_sort_date'] = parsed_dates
+                                                            sort_columns.append('_sort_date')
+                                                            sort_ascending.append(False)  # 최신순
+                                                        except:
+                                                            pass
+                                                    
+                                                    # 정렬 실행
+                                                    if sort_columns:
+                                                        same_properties_with_rank = same_properties_with_rank.sort_values(sort_columns, ascending=sort_ascending, na_position='last')
+                                                    
+                                                    # 정렬 후 다시 그룹화하여 순위 계산
+                                                    group_obj_sorted = same_properties_with_rank.groupby(same_property_key, dropna=False)
+                                                    same_properties_with_rank['같은매물내순위'] = group_obj_sorted.cumcount() + 1
+                                                    
+                                                    # 정렬용 임시 컬럼 제거
+                                                    same_properties_with_rank = same_properties_with_rank.drop(
+                                                        columns=[col for col in ['_sort_dong', '_sort_floor', '_sort_date'] if col in same_properties_with_rank.columns]
+                                                    )
+                                                    
+                                                    same_properties = same_properties_with_rank
+                                            
                                             # 표시할 컬럼 선택
                                             display_cols_for_same = [
                                                 '단지명', '동', '층', '총층수', '방향',
                                                 '거래유형', '가격', '전용면적', '공급면적',
-                                                '확인일', '공인중개사무소', '광고사', '원문'
+                                                '확인일', '공인중개사무소', '광고사', 
+                                                '같은매물내순위', '동일매물건수', '원문'
                                             ]
                                             existing_display_cols = [col for col in display_cols_for_same if col in same_properties.columns]
+                                            
+                                            # 정렬: 동, 층, 같은매물내순위 순서
+                                            same_properties_sorted = same_properties.copy()
+                                            
+                                            # 동 정렬 (숫자 추출)
+                                            if '동' in same_properties_sorted.columns:
+                                                same_properties_sorted['_sort_dong'] = same_properties_sorted['동'].astype(str).apply(
+                                                    lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                                                )
+                                            else:
+                                                same_properties_sorted['_sort_dong'] = 999
+                                            
+                                            # 층 정렬 (숫자 추출)
+                                            if '층' in same_properties_sorted.columns:
+                                                same_properties_sorted['_sort_floor'] = same_properties_sorted['층'].astype(str).apply(
+                                                    lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                                                )
+                                            else:
+                                                same_properties_sorted['_sort_floor'] = 999
+                                            
+                                            # 같은매물내순위 정렬
+                                            if '같은매물내순위' in same_properties_sorted.columns:
+                                                same_properties_sorted['_sort_rank'] = pd.to_numeric(same_properties_sorted['같은매물내순위'], errors='coerce').fillna(999)
+                                            else:
+                                                same_properties_sorted['_sort_rank'] = 999
+                                            
+                                            # 정렬 실행: 동, 층, 순위
+                                            same_properties_sorted = same_properties_sorted.sort_values(
+                                                ['_sort_dong', '_sort_floor', '_sort_rank'],
+                                                ascending=[True, True, True]
+                                            )
+                                            
+                                            # 정렬용 임시 컬럼 제거
+                                            same_properties_sorted = same_properties_sorted.drop(
+                                                columns=[col for col in ['_sort_dong', '_sort_floor', '_sort_rank'] if col in same_properties_sorted.columns]
+                                            )
+                                            same_properties = same_properties_sorted
                                             
                                             # 현재 매물 강조 표시 함수
                                             def highlight_current_property(compare_row):
@@ -700,22 +878,6 @@ def main():
                                                         return ['background-color: #fff4cd; font-weight: bold'] * len(compare_row)
                                                 
                                                 return styles
-                                            
-                                            # 정렬: 확인일 기준 내림차순 (최신순)
-                                            if '확인일' in same_properties.columns:
-                                                try:
-                                                    same_properties_sorted = same_properties.copy()
-                                                    parsed_dates = pd.to_datetime(
-                                                        same_properties_sorted['확인일'].astype(str).str.replace('.', '-', regex=False),
-                                                        format='%y-%m-%d',
-                                                        errors='coerce'
-                                                    )
-                                                    same_properties_sorted['_sort_date'] = parsed_dates
-                                                    same_properties_sorted = same_properties_sorted.sort_values('_sort_date', ascending=False, na_position='last')
-                                                    same_properties_sorted = same_properties_sorted.drop(columns=['_sort_date'])
-                                                    same_properties = same_properties_sorted
-                                                except:
-                                                    pass
                                             
                                             styled_same = same_properties[existing_display_cols].style.apply(
                                                 highlight_current_property, axis=1

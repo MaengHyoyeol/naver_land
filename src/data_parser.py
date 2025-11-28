@@ -407,7 +407,7 @@ class DataParser:
         # 출력 컬럼 구성
         output_columns = [
             '순번', '단지명', '동', '거래유형', '가격',
-            *group_columns, '공인중개사무소', '확인일',
+            *group_columns, '공인중개사무소', '광고사', '확인일',
             '같은매물내순위', '동일매물건수', '원문'
         ]
         existing_output_columns = [col for col in output_columns if col in agent_df.columns]

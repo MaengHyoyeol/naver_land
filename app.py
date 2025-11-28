@@ -86,7 +86,7 @@ def main():
         st.markdown("---")
         st.markdown("### ℹ️ 정보")
         st.markdown("""
-        **버전**: v2.1.2  
+        **버전**: v2.1.3  
         **브랜치**: develop
         """)
     
@@ -559,8 +559,8 @@ def main():
                                                 else:
                                                     min_rank_by_property[property_key] = rank_value
                                         
-                                        # 하이라이트 함수: 같은 매물 그룹의 최소 순위가 3 이상이면 하이라이트
-                                        def highlight_rank(row):
+                                        # 순위에 따른 색상 판단 함수
+                                        def get_rank_color(row):
                                             property_key_parts = []
                                             for key_col in same_property_key:
                                                 if key_col in row.index:
@@ -571,15 +571,56 @@ def main():
                                             min_rank = min_rank_by_property.get(property_key, 0)
                                             
                                             if min_rank >= 3:
-                                                return ['background-color: #ffe5e5'] * len(row)
-                                            return [''] * len(row)
-                                    else:
-                                        # 단일 공인중개사무소인 경우 기존 로직
+                                                return 'red'  # 3위 이상: 빨간색
+                                            elif min_rank >= 4:
+                                                return 'yellow'  # 4-5위: 노란색
+                                            else:
+                                                return 'white'  # 그 외: 하얀색
+                                        
+                                        # 하이라이트 함수
                                         def highlight_rank(row):
-                                            rank_value = row.get('같은매물내순위')
-                                            if pd.notna(rank_value) and rank_value >= 3:
+                                            color = get_rank_color(row)
+                                            if color == 'red':
                                                 return ['background-color: #ffe5e5'] * len(row)
-                                            return [''] * len(row)
+                                            elif color == 'yellow':
+                                                return ['background-color: #fff4cd'] * len(row)
+                                            else:
+                                                return [''] * len(row)
+                                        
+                                        # 정렬: 빨간색(0), 노란색(1), 하얀색(2) 순서
+                                        rankings_display['_highlight_sort'] = rankings_display.apply(
+                                            lambda row: 0 if get_rank_color(row) == 'red' else (1 if get_rank_color(row) == 'yellow' else 2), 
+                                            axis=1
+                                        )
+                                        rankings_display = rankings_display.sort_values('_highlight_sort').drop(columns=['_highlight_sort']).reset_index(drop=True)
+                                        
+                                    else:
+                                        # 단일 공인중개사무소인 경우
+                                        def get_rank_color(row):
+                                            rank_value = row.get('같은매물내순위')
+                                            if pd.notna(rank_value):
+                                                if rank_value >= 3:
+                                                    return 'red'  # 3위 이상: 빨간색
+                                                elif rank_value >= 4:
+                                                    return 'yellow'  # 4-5위: 노란색
+                                            return 'white'  # 그 외: 하얀색
+                                        
+                                        # 하이라이트 함수
+                                        def highlight_rank(row):
+                                            color = get_rank_color(row)
+                                            if color == 'red':
+                                                return ['background-color: #ffe5e5'] * len(row)
+                                            elif color == 'yellow':
+                                                return ['background-color: #fff4cd'] * len(row)
+                                            else:
+                                                return [''] * len(row)
+                                        
+                                        # 정렬: 빨간색(0), 노란색(1), 하얀색(2) 순서
+                                        rankings_display['_highlight_sort'] = rankings_display.apply(
+                                            lambda row: 0 if get_rank_color(row) == 'red' else (1 if get_rank_color(row) == 'yellow' else 2), 
+                                            axis=1
+                                        )
+                                        rankings_display = rankings_display.sort_values('_highlight_sort').drop(columns=['_highlight_sort']).reset_index(drop=True)
                                     
                                     styled_rankings = rankings_display.style.apply(highlight_rank, axis=1)
                                     st.dataframe(styled_rankings, use_container_width=True)
@@ -591,8 +632,23 @@ def main():
                                 st.subheader("🔍 각 매물의 같은 매물 목록")
                                 st.info("아래에서 인덱스를 클릭하여 같은 매물들을 확인할 수 있습니다.")
                                 
+                                # 이미 표시한 같은 매물 그룹 추적
+                                shown_property_groups = set()
+                                
                                 # 각 행을 반복하면서 expander 추가
                                 for idx, row in combined_rankings.iterrows():
+                                    # 같은 매물 그룹 키 생성 (중복 체크용)
+                                    property_group_key_parts = []
+                                    for key in same_property_key:
+                                        if key in row.index:
+                                            val = row[key]
+                                            property_group_key_parts.append(str(val) if pd.notna(val) else 'None')
+                                    property_group_key = tuple(property_group_key_parts)
+                                    
+                                    # 이미 표시한 같은 매물 그룹이면 건너뛰기
+                                    if property_group_key in shown_property_groups:
+                                        continue
+                                    
                                     # 같은 매물 찾기 (필터링된 데이터에서 찾기)
                                     same_property_mask = pd.Series(True, index=df_filtered.index)
                                     
@@ -616,9 +672,12 @@ def main():
                                         if col in row.index and pd.notna(row.get(col)):
                                             property_info.append(str(row[col]))
                                     
-                                    expander_title = f"📌 인덱스 {idx + 1}: {' | '.join(property_info[:3])}"
+                                    expander_title = f"📌 {' | '.join(property_info[:3])}"
                                     if '같은매물내순위' in row.index and pd.notna(row.get('같은매물내순위')):
-                                        expander_title += f" (순위: {int(row['같은매물내순위'])}, 동일 매물: {len(same_properties)}개)"
+                                        expander_title += f" (동일 매물: {len(same_properties)}개)"
+                                    
+                                    # 같은 매물 그룹을 표시했다고 표시
+                                    shown_property_groups.add(property_group_key)
                                     
                                     with st.expander(expander_title, expanded=False):
                                         if len(same_properties) > 0:

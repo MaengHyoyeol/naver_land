@@ -118,7 +118,8 @@ class NaverRealEstateCrawler:
             options.add_experimental_option("prefs", prefs)
             
             # 타임아웃 설정
-            self.driver = uc.Chrome(options=options)
+            # version_main=None으로 설정하면 자동으로 Chrome 버전을 감지하여 맞춤
+            self.driver = uc.Chrome(options=options, version_main=None)
             self.driver.set_page_load_timeout(30)  # 페이지 로딩 타임아웃 30초
             self.driver.implicitly_wait(10)  # 요소 찾기 대기 시간 10초
             
@@ -231,120 +232,6 @@ class NaverRealEstateCrawler:
             
         except Exception as e:
             self._log(f"❌ 검색 오류: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
-    def check_property_list_exists(self) -> bool:
-        """
-        매물 목록(articleListArea)이 존재하는지 확인
-        
-        Returns:
-            bool: 매물 목록이 존재하면 True
-        """
-        try:
-            # articleListArea가 있는지 확인
-            article_area = WebDriverWait(self.driver, 3).until(
-                EC.presence_of_element_located((By.ID, "articleListArea"))
-            )
-            
-            # 매물 버튼이 하나라도 있는지 확인
-            items = self.driver.find_elements(By.CSS_SELECTOR, "#articleListArea button")
-            if len(items) > 0:
-                self._log(f"✅ 매물 목록 확인: {len(items)}개 매물 발견")
-                return True
-            else:
-                self._log(f"⚠️  매물 목록 영역은 있지만 매물이 없습니다.")
-                return False
-                
-        except Exception as e:
-            self._log(f"⚠️  매물 목록을 찾을 수 없습니다: {str(e)}")
-            return False
-    
-    def click_complex_name(self, keyword: str) -> bool:
-        """
-        검색 결과에서 단지명 클릭 (매물 목록이 나타나지 않을 때)
-        
-        Args:
-            keyword (str): 검색한 단지명
-            
-        Returns:
-            bool: 클릭 성공 여부
-        """
-        try:
-            self._log(f"\n🔄 단지명 클릭 시도: '{keyword}'")
-            
-            # 여러 선택자 시도 (단지명 링크 또는 버튼)
-            selectors = [
-                # 단지명 링크 (검색 결과 페이지)
-                (By.XPATH, f"//a[contains(text(), '{keyword}')]"),
-                (By.XPATH, f"//a[contains(@href, '/complexes/') and contains(., '{keyword}')]"),
-                # 단지명이 포함된 링크
-                (By.CSS_SELECTOR, f"a[href*='/complexes/']"),
-                # 단지 정보 영역의 클릭 가능한 요소
-                (By.CSS_SELECTOR, "div[class*='complex'] a"),
-                (By.CSS_SELECTOR, "div[class*='item'] a"),
-                # h1, h2, h3 등 단지명 제목
-                (By.XPATH, f"//h1[contains(text(), '{keyword}')] | //h2[contains(text(), '{keyword}')] | //h3[contains(text(), '{keyword}')]"),
-            ]
-            
-            for by, selector in selectors:
-                try:
-                    elements = self.driver.find_elements(by, selector)
-                    for element in elements:
-                        element_text = element.text.strip()
-                        # 단지명이 포함되어 있는지 확인
-                        if keyword.split()[0] in element_text or any(word in element_text for word in keyword.split() if len(word) > 2):
-                            # 요소가 보이는지 확인
-                            if element.is_displayed():
-                                self._log(f"✅ 단지명 요소 발견: {element_text}")
-                                # 스크롤하여 요소가 보이도록
-                                self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
-                                time.sleep(1)
-                                element.click()
-                                self._log(f"✅ 단지명 클릭 완료")
-                                
-                                # 클릭 후 페이지 로딩 대기
-                                time.sleep(3)
-                                WebDriverWait(self.driver, 30).until(
-                                    lambda d: d.execute_script("return document.readyState") == "complete"
-                                )
-                                time.sleep(2)
-                                
-                                self._log(f"   클릭 후 URL: {self.driver.current_url}")
-                                return True
-                except Exception as e:
-                    continue
-            
-            # 대안: 검색 결과 목록에서 첫 번째 단지 클릭
-            try:
-                self._log("   검색 결과 목록에서 첫 번째 단지 클릭 시도...")
-                # 검색 결과 리스트의 첫 번째 항목
-                first_complex = WebDriverWait(self.driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "div[class*='item'] a, div[class*='list'] a, a[href*='/complexes/']"))
-                )
-                self.driver.execute_script("arguments[0].scrollIntoView(true);", first_complex)
-                time.sleep(1)
-                first_complex.click()
-                self._log(f"✅ 첫 번째 검색 결과 클릭 완료")
-                
-                # 클릭 후 페이지 로딩 대기
-                time.sleep(3)
-                WebDriverWait(self.driver, 30).until(
-                    lambda d: d.execute_script("return document.readyState") == "complete"
-                )
-                time.sleep(2)
-                
-                self._log(f"   클릭 후 URL: {self.driver.current_url}")
-                return True
-            except Exception as e:
-                self._log(f"⚠️  첫 번째 검색 결과 클릭 실패: {str(e)}")
-            
-            self._log(f"❌ 단지명 클릭 실패")
-            return False
-            
-        except Exception as e:
-            self._log(f"❌ 단지명 클릭 오류: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -562,36 +449,14 @@ class NaverRealEstateCrawler:
             if not self.search_complex(keyword):
                 return None
             
-            # 2. 매물 목록 확인 및 단지명 클릭
-            time.sleep(2)  # 검색 후 페이지 로딩 대기
-            if not self.check_property_list_exists():
-                self._log("\n⚠️  매물 목록이 나타나지 않았습니다. 단지명을 클릭합니다...")
-                if self.click_complex_name(keyword):
-                    # 클릭 후 다시 확인
-                    time.sleep(3)
-                    if not self.check_property_list_exists():
-                        self._log("⚠️  단지명 클릭 후에도 매물 목록이 나타나지 않습니다.")
-                        self._log("   1초 후 다시 확인합니다...")
-                        time.sleep(1)
-                else:
-                    self._log("⚠️  단지명 클릭 실패. 계속 진행합니다...")
-            
-            # 3. 동일매물 묶기
+            # 2. 동일매물 묶기
             #self.click_merge_checkbox()
             
-            # 4. 모든 매물 로드
+            # 3. 모든 매물 로드
             total_items = self.load_all_items()
-            
-            # 매물이 0개이고, 아직 매물 목록이 없으면 다시 단지명 클릭 시도
-            if total_items == 0:
-                self._log("\n⚠️  매물이 0개입니다. 단지명을 다시 클릭합니다...")
-                if self.click_complex_name(keyword):
-                    time.sleep(3)
-                    total_items = self.load_all_items()  # 다시 시도
-            
             self._log(f"\n📋 최종 매물 수: {total_items}개\n")
             
-            # 5. 데이터 추출
+            # 4. 데이터 추출
             df = self.extract_data()
             
             return df

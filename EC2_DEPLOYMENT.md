@@ -319,3 +319,7 @@ sudo certbot --nginx -d your-domain.com
 4. AWS 콘솔의 보안 그룹 설정
 
 
+
+
+
+

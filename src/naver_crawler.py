@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 import re
 import random
 import os
+import shutil
 from datetime import datetime
 
 
@@ -116,6 +117,32 @@ class NaverRealEstateCrawler:
                 "profile.password_manager_enabled": False,
             }
             options.add_experimental_option("prefs", prefs)
+            
+            # --- AWS 등 서버 환경에서 Chrome 경로를 명시적으로 설정 ---
+            # 일부 환경에서는 undetected_chromedriver 가 Chrome 바이너리 위치를
+            # 잘못 인식해서 "Binary Location Must be a String" 에러가 발생할 수 있음
+            try:
+                chrome_path_candidates = [
+                    shutil.which("google-chrome"),
+                    shutil.which("google-chrome-stable"),
+                    shutil.which("chromium-browser"),
+                    shutil.which("chromium"),
+                    "/usr/bin/google-chrome",
+                    "/usr/local/bin/google-chrome",
+                ]
+                chrome_path = next(
+                    (p for p in chrome_path_candidates if isinstance(p, str) and os.path.exists(p)),
+                    None,
+                )
+                if chrome_path:
+                    # 명시적으로 문자열 경로를 설정
+                    options.binary_location = chrome_path
+                    self._log(f"✅ Chrome binary 위치 설정: {chrome_path}")
+                else:
+                    self._log("⚠️ Chrome binary를 찾지 못했습니다. 기본 탐지에 맡깁니다.")
+            except Exception as e:
+                # 경로 설정 실패해도 치명적이지 않으므로 로그만 남기고 계속 진행
+                self._log(f"⚠️ Chrome binary 위치 설정 중 예외 발생: {e}")
             
             # 타임아웃 설정
             # version_main=None으로 설정하면 자동으로 Chrome 버전을 감지하여 맞춤

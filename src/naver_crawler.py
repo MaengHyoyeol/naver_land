@@ -121,6 +121,7 @@ class NaverRealEstateCrawler:
             # --- AWS 등 서버 환경에서 Chrome 경로를 명시적으로 설정 ---
             # 일부 환경에서는 undetected_chromedriver 가 Chrome 바이너리 위치를
             # 잘못 인식해서 "Binary Location Must be a String" 에러가 발생할 수 있음
+            chrome_path = None
             try:
                 chrome_path_candidates = [
                     shutil.which("google-chrome"),
@@ -129,24 +130,42 @@ class NaverRealEstateCrawler:
                     shutil.which("chromium"),
                     "/usr/bin/google-chrome",
                     "/usr/local/bin/google-chrome",
+                    "/opt/google/chrome/google-chrome",
                 ]
+                # None이 아닌 실제 경로만 필터링
                 chrome_path = next(
-                    (p for p in chrome_path_candidates if isinstance(p, str) and os.path.exists(p)),
+                    (p for p in chrome_path_candidates if p and isinstance(p, str) and os.path.exists(p)),
                     None,
                 )
                 if chrome_path:
                     # 명시적으로 문자열 경로를 설정
-                    options.binary_location = chrome_path
+                    options.binary_location = str(chrome_path)  # 확실히 문자열로 변환
                     self._log(f"✅ Chrome binary 위치 설정: {chrome_path}")
                 else:
-                    self._log("⚠️ Chrome binary를 찾지 못했습니다. 기본 탐지에 맡깁니다.")
+                    self._log("⚠️ Chrome binary를 찾지 못했습니다.")
+                    # Chrome이 없으면 에러 메시지와 함께 실패
+                    self._log("❌ Chrome이 설치되어 있지 않습니다. 다음 명령어로 설치하세요:")
+                    self._log("   Amazon Linux: sudo dnf install -y google-chrome-stable")
+                    self._log("   또는: cd ~/naver_real_estate && ./install_chrome.sh")
+                    return False
             except Exception as e:
                 # 경로 설정 실패해도 치명적이지 않으므로 로그만 남기고 계속 진행
                 self._log(f"⚠️ Chrome binary 위치 설정 중 예외 발생: {e}")
+                return False
             
             # 타임아웃 설정
             # version_main=None으로 설정하면 자동으로 Chrome 버전을 감지하여 맞춤
-            self.driver = uc.Chrome(options=options, version_main=None)
+            # Chrome 경로를 찾았을 때만 실행
+            if chrome_path:
+                try:
+                    self.driver = uc.Chrome(options=options, version_main=None)
+                except Exception as e:
+                    # binary_location이 문제일 수 있으므로 다시 시도 (경로 없이)
+                    self._log(f"⚠️ Chrome 경로 지정으로 실패, 기본 탐지로 재시도: {e}")
+                    options.binary_location = None  # 경로 제거
+                    self.driver = uc.Chrome(options=options, version_main=None)
+            else:
+                return False
             self.driver.set_page_load_timeout(30)  # 페이지 로딩 타임아웃 30초
             self.driver.implicitly_wait(10)  # 요소 찾기 대기 시간 10초
             

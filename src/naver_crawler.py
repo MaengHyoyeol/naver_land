@@ -15,6 +15,7 @@ import re
 import random
 import os
 import shutil
+import platform
 from datetime import datetime
 
 
@@ -123,15 +124,38 @@ class NaverRealEstateCrawler:
             # 잘못 인식해서 "Binary Location Must be a String" 에러가 발생할 수 있음
             chrome_path = None
             try:
-                chrome_path_candidates = [
+                # OS별로 적절한 경로만 체크
+                system = platform.system()
+                chrome_path_candidates = []
+                
+                # 공통 경로 (PATH에 있는 경우)
+                chrome_path_candidates.extend([
                     shutil.which("google-chrome"),
                     shutil.which("google-chrome-stable"),
                     shutil.which("chromium-browser"),
                     shutil.which("chromium"),
-                    "/usr/bin/google-chrome",
-                    "/usr/local/bin/google-chrome",
-                    "/opt/google/chrome/google-chrome",
-                ]
+                ])
+                
+                # Linux 경로
+                if system == "Linux":
+                    chrome_path_candidates.extend([
+                        "/usr/bin/google-chrome",
+                        "/usr/local/bin/google-chrome",
+                        "/opt/google/chrome/google-chrome",
+                    ])
+                # macOS 경로
+                elif system == "Darwin":
+                    chrome_path_candidates.extend([
+                        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                    ])
+                # Windows 경로 (참고용)
+                elif system == "Windows":
+                    chrome_path_candidates.extend([
+                        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+                    ])
+                
                 # None이 아닌 실제 경로만 필터링
                 chrome_path = next(
                     (p for p in chrome_path_candidates if p and isinstance(p, str) and os.path.exists(p)),

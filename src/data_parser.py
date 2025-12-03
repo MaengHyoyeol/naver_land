@@ -292,7 +292,7 @@ class DataParser:
         # 컬럼 순서 정리
         columns_order = [
             '단지명', '동', '거래유형', '가격', '구분',
-            '공급면적', '전용면적', '층', '총층수', '층구분', '방향',
+            '공급면적', '전용면적', '층', '총층수', '방향',
             '확인일', '중개사수', '공인중개사무소', '원문'
         ]
         
@@ -306,57 +306,6 @@ class DataParser:
         # 인덱스 리셋
         parsed_df = parsed_df.reset_index(drop=True)
         parsed_df.insert(0, '순번', range(1, len(parsed_df) + 1))
-        
-        # 층 구분 컬럼 추가 (총층수 기준 1/3, 2/3 구분)
-        def calculate_floor_category(row):
-            """
-            총층수와 층 정보를 이용하여 저층/중층/고층 구분
-            - 1/3 이하: 저층
-            - 1/3 ~ 2/3: 중층
-            - 2/3 이상: 고층
-            """
-            try:
-                # 총층수에서 숫자 추출
-                total_floor_str = str(row.get('총층수', ''))
-                total_floor_match = re.search(r'(\d+)', total_floor_str)
-                if not total_floor_match:
-                    return None
-                total_floor = int(total_floor_match.group(1))
-                
-                if total_floor == 0:
-                    return None
-                
-                # 층에서 숫자 추출
-                floor_str = str(row.get('층', ''))
-                
-                # "저층", "중층", "고층" 같은 경우 처리
-                if '저층' in floor_str or floor_str == '저':
-                    return '저층'
-                elif '중층' in floor_str or floor_str == '중':
-                    return '중층'
-                elif '고층' in floor_str or floor_str == '고':
-                    return '고층'
-                
-                # 숫자 추출
-                floor_match = re.search(r'(\d+)', floor_str)
-                if not floor_match:
-                    return None
-                floor = int(floor_match.group(1))
-                
-                # 비율 계산
-                ratio = floor / total_floor
-                
-                if ratio <= 1/3:
-                    return '저층'
-                elif ratio <= 2/3:
-                    return '중층'
-                else:
-                    return '고층'
-                    
-            except (ValueError, TypeError, ZeroDivisionError):
-                return None
-        
-        parsed_df['층구분'] = parsed_df.apply(calculate_floor_category, axis=1)
         
         return parsed_df
     
@@ -458,7 +407,7 @@ class DataParser:
         # 출력 컬럼 구성
         output_columns = [
             '순번', '단지명', '동', '거래유형', '가격',
-            *group_columns, '공인중개사무소', '광고사', '확인일',
+            *group_columns, '공인중개사무소', '확인일',
             '같은매물내순위', '동일매물건수', '원문'
         ]
         existing_output_columns = [col for col in output_columns if col in agent_df.columns]

@@ -338,7 +338,7 @@ def main():
             
             # 필터
             st.subheader("🔍 필터")
-            col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
             
             with col1:
                 if '거래유형' in df.columns:
@@ -382,13 +382,6 @@ def main():
                 else:
                     selected_agent = '전체'
             
-            with col7:
-                if '전용면적' in df.columns:
-                    areas = ['전체'] + sorted(df['전용면적'].dropna().unique(), key=lambda x: float(str(x).replace('㎡', '').strip()) if isinstance(x, str) and '㎡' in str(x) else (float(x) if isinstance(x, (int, float)) else 999))
-                    selected_area = st.selectbox("전용면적", areas)
-                else:
-                    selected_area = '전체'
-            
             # 필터링
             df_filtered = df.copy()
             original_count = len(df_filtered)
@@ -405,8 +398,6 @@ def main():
                 df_filtered = df_filtered[df_filtered['확인일'] == selected_date]
             if selected_agent != '전체':
                 df_filtered = df_filtered[df_filtered['공인중개사무소'] == selected_agent]
-            if selected_area != '전체':
-                df_filtered = df_filtered[df_filtered['전용면적'] == selected_area]
             
             filtered_count = len(df_filtered)
 
@@ -448,8 +439,6 @@ def main():
                 filter_info.append(f"확인일: {selected_date}")
             if selected_agent != '전체':
                 filter_info.append(f"공인중개사무소: {selected_agent}")
-            if selected_area != '전체':
-                filter_info.append(f"전용면적: {selected_area}")
             
             if filter_info:
                 st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 → 중복 제거 후: {after_dedup_count}개 (전체: {original_count}개)")
@@ -460,7 +449,7 @@ def main():
                 df_filtered = df_filtered.drop(columns=['순번'])
             
             preferred_order = [
-                '단지명', '동', '층', '총층수', '층구분', '방향',
+                '단지명', '동', '층', '총층수', '방향',
                 '거래유형', '가격', '전용면적', '공급면적',
                 '확인일', '공인중개사무소', '광고사', '원문', '구분'
             ]
@@ -474,7 +463,6 @@ def main():
             st.subheader("🏅 내 공인중개사 순위")
             agent_input = st.text_area(
                 "내 공인중개사무소 이름을 입력하세요 (여러 개 입력 가능, 한 줄에 하나씩 또는 쉼표로 구분)",
-                value="국민공인중개사사무소\n중동역래미안어반비스타공인중개사사무소",
                 placeholder="예:\n영등포아트자이공인중개사사무소\n래미안탑부동산공인중개사사무소",
                 key="agent_name_input",
                 height=100
@@ -520,7 +508,7 @@ def main():
                                 
                                 # 순위 결과 컬럼 순서 지정
                                 rank_preferred_order = [
-                                    '단지명', '동', '층', '총층수', '층구분', '방향',
+                                    '단지명', '동', '층', '총층수', '방향',
                                     '거래유형', '가격', '전용면적', '공급면적',
                                     '확인일', '공인중개사무소', '광고사', '원문', '구분',
                                     '같은매물내순위', '동일매물건수'
@@ -879,8 +867,8 @@ def main():
                                             
                                             # 표시할 컬럼 선택
                                             display_cols_for_same = [
-                                                '단지명', '동', '층', '전용면적', '총층수', '층구분',
-                                                '거래유형', '가격', '공급면적',
+                                                '단지명', '동', '층', '총층수', '방향',
+                                                '거래유형', '가격', '전용면적', '공급면적',
                                                 '확인일', '공인중개사무소', '광고사', 
                                                 '같은매물내순위', '동일매물건수', '원문'
                                             ]

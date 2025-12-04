@@ -38,6 +38,8 @@ class NaverRealEstateCrawler:
         self.driver = None
         self.enable_logging = enable_logging
         self.log_file = None
+        # 현재 검색 중인 단지명 (스크롤 영역이 없을 때 단지 버튼 클릭 등에 사용)
+        self.current_keyword: Optional[str] = None
         
         # 로그 파일 설정
         if self.enable_logging:
@@ -219,6 +221,73 @@ class NaverRealEstateCrawler:
                 )
                 time.sleep(2)  # 추가 안정화 시간
                 
+                # 3. 검색 결과에서 스크롤 버튼 확인 및 단지 클릭
+                current_url = self.driver.current_url
+                self._log(f"   검색 후 URL: {current_url}")
+                
+                # 단지 상세 페이지로 이동했는지 확인
+                if '/complexes/' in current_url:
+                    self._log("✅ 단지 상세 페이지로 이동됨")
+                else:
+                    # 검색 결과 목록 페이지인 경우, 검색어와 일치하는 단지 클릭
+                    self._log("🔍 검색 결과 목록에서 단지 찾는 중...")
+                    try:
+                        # 스크롤 버튼이 있는지 확인
+                        scroll_buttons = self.driver.find_elements(By.CSS_SELECTOR, 
+                            "button[class*='scroll'], button[class*='more'], .scroll-button, [class*='더보기']")
+                        
+                        if not scroll_buttons:
+                            # 스크롤 버튼이 없으면 검색어와 일치하는 단지 클릭
+                            self._log("⚠️  스크롤 버튼 없음, 검색어와 일치하는 단지 클릭 시도")
+                            
+                            # 검색어에서 공백 제거 (예: "영등포 아트자이" -> "영등포아트자이")
+                            keyword_normalized = keyword.replace(' ', '')
+                            
+                            # 단지 링크 찾기 (여러 선택자 시도)
+                            complex_link = None
+                            selectors = [
+                                f"//a[contains(@href, '/complexes/') and contains(., '{keyword}')]",
+                                f"//a[contains(@href, '/complexes/') and contains(., '{keyword_normalized}')]",
+                                f"//div[contains(@class, 'complex')]//a[contains(., '{keyword}')]",
+                                f"//div[contains(@class, 'item')]//a[contains(., '{keyword}')]",
+                            ]
+                            
+                            for selector in selectors:
+                                try:
+                                    elements = self.driver.find_elements(By.XPATH, selector)
+                                    if elements:
+                                        # 첫 번째 매칭되는 단지 클릭
+                                        complex_link = elements[0]
+                                        self._log(f"✅ 단지 링크 발견: {selector}")
+                                        break
+                                except:
+                                    continue
+                            
+                            if complex_link:
+                                # 단지 클릭
+                                self.driver.execute_script("arguments[0].scrollIntoView(true);", complex_link)
+                                time.sleep(1)
+                                complex_link.click()
+                                self._log("✅ 단지 클릭 완료")
+                                
+                                # 단지 상세 페이지 로딩 대기
+                                time.sleep(3)
+                                WebDriverWait(self.driver, 30).until(
+                                    lambda d: d.execute_script("return document.readyState") == "complete"
+                                )
+                                time.sleep(2)
+                                
+                                new_url = self.driver.current_url
+                                self._log(f"   단지 상세 페이지 URL: {new_url}")
+                            else:
+                                self._log("⚠️  검색어와 일치하는 단지를 찾을 수 없습니다")
+                        else:
+                            self._log("✅ 스크롤 버튼 발견, 스크롤 진행")
+                    except Exception as e:
+                        self._log(f"⚠️  단지 클릭 시도 중 오류: {e}")
+                        import traceback
+                        self._log(traceback.format_exc())
+                
                 self._log(f"✅ 검색 완료")
                 self._log(f"   현재 URL: {self.driver.current_url}")
                 
@@ -325,8 +394,67 @@ class NaverRealEstateCrawler:
                 return len(items)
                 
         except Exception as e:
+            # 스크롤 영역을 못 찾은 경우: 검색 쿼리와 같은 단지 버튼을 찾아서 한 번 더 진입 시도
             self._log(f"⚠️  스크롤 영역을 찾을 수 없습니다: {str(e)}")
-            return 0
+            keyword = getattr(self, "current_keyword", None)
+            if keyword:
+                try:
+                    self._log("🔁 스크롤 영역 대신 검색어와 같은 단지 버튼을 클릭해 다시 시도합니다...")
+                    keyword_normalized = keyword.replace(" ", "")
+
+                    # 단지 버튼/링크 후보 XPATH들
+                    candidate_xpaths = [
+                        f"//button[contains(., '{keyword}') or contains(., '{keyword_normalized}')]",
+                        f"//a[contains(., '{keyword}') or contains(., '{keyword_normalized}')]",
+                        f"//li//*[contains(., '{keyword}') or contains(., '{keyword_normalized}')]",
+                    ]
+
+                    complex_element = None
+                    for xpath in candidate_xpaths:
+                        try:
+                            elems = self.driver.find_elements(By.XPATH, xpath)
+                            if elems:
+                                complex_element = elems[0]
+                                self._log(f"✅ 단지 후보 요소 발견: {xpath}")
+                                break
+                        except Exception:
+                            continue
+
+                    if complex_element:
+                        # 단지 요소 클릭
+                        self.driver.execute_script("arguments[0].scrollIntoView(true);", complex_element)
+                        time.sleep(1)
+                        complex_element.click()
+                        self._log("✅ 단지 버튼 클릭 완료 (스크롤 영역 재시도)")
+
+                        # 단지 상세 로딩 대기
+                        time.sleep(3)
+                        WebDriverWait(self.driver, 30).until(
+                            lambda d: d.execute_script("return document.readyState") == "complete"
+                        )
+                        time.sleep(2)
+                        self._log(f"   클릭 후 URL: {self.driver.current_url}")
+
+                        # 한 번 더 articleListArea 시도
+                        try:
+                            article_area = WebDriverWait(self.driver, 5).until(
+                                EC.presence_of_element_located((By.ID, "articleListArea"))
+                            )
+                            scroll_area = self.driver.execute_script("return arguments[0].parentElement", article_area)
+                            if scroll_area:
+                                self._log("✅ 단지 버튼 클릭 후 스크롤 영역 발견")
+                            else:
+                                self._log("⚠️  단지 버튼 클릭 후에도 스크롤 영역을 찾지 못했습니다.")
+                        except Exception as e2:
+                            self._log(f"⚠️  단지 버튼 클릭 후에도 articleListArea를 찾지 못했습니다: {e2}")
+                    else:
+                        self._log("⚠️  검색어와 일치하는 단지 버튼을 찾을 수 없습니다.")
+                except Exception as e_click:
+                    self._log(f"⚠️  단지 버튼 클릭 재시도 중 오류: {e_click}")
+
+            if not scroll_area:
+                # 여전히 스크롤 영역이 없으면 매물 수를 0으로 간주
+                return 0
         
         prev_count = 0
         no_change_count = 0
@@ -440,6 +568,9 @@ class NaverRealEstateCrawler:
         Returns:
             pd.DataFrame: 크롤링된 데이터
         """
+        # 현재 단지명 저장 (스크롤 영역이 없을 때 단지 버튼을 다시 찾기 위해 사용)
+        self.current_keyword = keyword
+        
         self._log(f"\n{'='*80}")
         self._log(f"  🏠 '{keyword}' 크롤링 시작")
         self._log(f"{'='*80}")

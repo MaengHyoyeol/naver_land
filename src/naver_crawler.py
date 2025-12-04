@@ -118,7 +118,8 @@ class NaverRealEstateCrawler:
             options.add_experimental_option("prefs", prefs)
             
             # 타임아웃 설정
-            self.driver = uc.Chrome(options=options)
+            # version_main=None: 자동으로 Chrome 버전을 감지하여 맞는 ChromeDriver 다운로드
+            self.driver = uc.Chrome(options=options, version_main=None)
             self.driver.set_page_load_timeout(30)  # 페이지 로딩 타임아웃 30초
             self.driver.implicitly_wait(10)  # 요소 찾기 대기 시간 10초
             

@@ -436,11 +436,53 @@ class DataParser:
         if '공인중개사무소' not in work_df.columns:
             return pd.DataFrame()
         
-        # 원본 순서를 유지하여 순위 계산
-        if '순번' in work_df.columns:
-            work_df = work_df.sort_values('순번')
+        # 필터링된 데이터를 정렬: 거래유형, 동, 층, 총층수, 전용면적 순서
+        sort_columns = []
+        temp_sort_cols = []
+        
+        # 정렬 기준 컬럼 순서대로 처리
+        if '거래유형' in work_df.columns:
+            sort_columns.append('거래유형')
+        
+        if '동' in work_df.columns:
+            work_df['_sort_dong'] = work_df['동'].astype(str).apply(
+                lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+            )
+            sort_columns.append('_sort_dong')
+            temp_sort_cols.append('_sort_dong')
+        
+        if '층' in work_df.columns:
+            work_df['_sort_floor'] = work_df['층'].astype(str).apply(
+                lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+            )
+            sort_columns.append('_sort_floor')
+            temp_sort_cols.append('_sort_floor')
+        
+        if '총층수' in work_df.columns:
+            work_df['_sort_total_floor'] = work_df['총층수'].astype(str).apply(
+                lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+            )
+            sort_columns.append('_sort_total_floor')
+            temp_sort_cols.append('_sort_total_floor')
+        
+        if '전용면적' in work_df.columns:
+            work_df['_sort_area'] = work_df['전용면적'].astype(str).apply(
+                lambda x: float(re.findall(r'\d+\.?\d*', x)[0]) if re.findall(r'\d+\.?\d*', x) else 0
+            )
+            sort_columns.append('_sort_area')
+            temp_sort_cols.append('_sort_area')
+        
+        # 정렬 실행
+        if sort_columns:
+            work_df = work_df.sort_values(sort_columns, ascending=[True] * len(sort_columns))
+            # 정렬용 임시 컬럼 제거
+            work_df = work_df.drop(columns=[col for col in temp_sort_cols if col in work_df.columns])
         else:
-            work_df = work_df.reset_index(drop=True)
+            # 정렬 컬럼이 없으면 순번으로 정렬
+            if '순번' in work_df.columns:
+                work_df = work_df.sort_values('순번')
+            else:
+                work_df = work_df.reset_index(drop=True)
         
         # 동일 매물 내 순위와 매물 수 계산
         group_obj = work_df.groupby(group_columns, dropna=False)
@@ -458,7 +500,7 @@ class DataParser:
         # 출력 컬럼 구성
         output_columns = [
             '순번', '단지명', '동', '거래유형', '가격',
-            *group_columns, '공인중개사무소', '확인일',
+            *group_columns, '공인중개사무소', '광고사', '확인일',
             '같은매물내순위', '동일매물건수', '원문'
         ]
         existing_output_columns = [col for col in output_columns if col in agent_df.columns]

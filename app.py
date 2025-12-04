@@ -498,6 +498,47 @@ def main():
             if '순번' in df_filtered.columns:
                 df_filtered = df_filtered.drop(columns=['순번'])
             
+            # 필터링된 데이터 정렬: 거래유형, 동, 층, 총층수, 전용면적 순서
+            sort_columns = []
+            temp_sort_cols = []
+            
+            if '거래유형' in df_filtered.columns:
+                sort_columns.append('거래유형')
+            
+            if '동' in df_filtered.columns:
+                df_filtered['_sort_dong'] = df_filtered['동'].astype(str).apply(
+                    lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                )
+                sort_columns.append('_sort_dong')
+                temp_sort_cols.append('_sort_dong')
+            
+            if '층' in df_filtered.columns:
+                df_filtered['_sort_floor'] = df_filtered['층'].astype(str).apply(
+                    lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                )
+                sort_columns.append('_sort_floor')
+                temp_sort_cols.append('_sort_floor')
+            
+            if '총층수' in df_filtered.columns:
+                df_filtered['_sort_total_floor'] = df_filtered['총층수'].astype(str).apply(
+                    lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                )
+                sort_columns.append('_sort_total_floor')
+                temp_sort_cols.append('_sort_total_floor')
+            
+            if '전용면적' in df_filtered.columns:
+                df_filtered['_sort_area'] = df_filtered['전용면적'].astype(str).apply(
+                    lambda x: float(re.findall(r'\d+\.?\d*', x)[0]) if re.findall(r'\d+\.?\d*', x) else 0
+                )
+                sort_columns.append('_sort_area')
+                temp_sort_cols.append('_sort_area')
+            
+            # 정렬 실행
+            if sort_columns:
+                df_filtered = df_filtered.sort_values(sort_columns, ascending=[True] * len(sort_columns))
+                # 정렬용 임시 컬럼 제거
+                df_filtered = df_filtered.drop(columns=[col for col in temp_sort_cols if col in df_filtered.columns])
+            
             preferred_order = [
                 '거래유형', '동', '층', '층구분', '전용면적',
                 '단지명', '총층수', '가격', '공급면적',
@@ -561,8 +602,8 @@ def main():
                                 rank_preferred_order = [
                                     '거래유형', '동', '층', '층구분', '전용면적',
                                     '단지명', '총층수', '가격', '공급면적',
-                                    '확인일', '공인중개사무소', '광고사', '원문', '구분',
-                                    '같은매물내순위', '동일매물건수'
+                                    '확인일', '공인중개사무소', '광고사', '구분',
+                                    '같은매물내순위', '동일매물건수', '원문'
                                 ]
                                 # 중복 제거된 컬럼 리스트 생성
                                 rank_display_cols = []
@@ -619,7 +660,7 @@ def main():
                                 rankings_display = rankings_display_sorted.reset_index(drop=True)
                                 
                                 # 같은 매물 찾기 기준
-                                same_property_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적']
+                                same_property_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적', '광고사']
                                 
                                 if '같은매물내순위' in rankings_display.columns:
                                     # 여러 공인중개사무소가 입력된 경우, 같은 매물 내 최소 순위 계산
@@ -676,11 +717,19 @@ def main():
                                             else:
                                                 return [''] * len(row)
                                         
-                                        # 정렬: 색상 → 동 → 층 → 순위 순서
+                                        # 정렬: 하이라이트(색상) 우선 → 거래유형 → 동 → 층 → 같은매물내순위 순서
                                         rankings_display['_highlight_sort'] = rankings_display.apply(
                                             lambda row: 0 if get_rank_color(row) == 'red' else (1 if get_rank_color(row) == 'yellow' else 2), 
                                             axis=1
                                         )
+                                        
+                                        # 거래유형 정렬
+                                        if '거래유형' in rankings_display.columns:
+                                            # 매매=1, 전세=2, 월세=3 순서
+                                            rankings_display['_sort_type'] = rankings_display['거래유형'].map({'매매': 1, '전세': 2, '월세': 3}).fillna(999)
+                                        else:
+                                            rankings_display['_sort_type'] = 999
+                                        
                                         # 동 정렬 (숫자 추출)
                                         if '동' in rankings_display.columns:
                                             rankings_display['_sort_dong'] = rankings_display['동'].astype(str).apply(
@@ -688,6 +737,7 @@ def main():
                                             )
                                         else:
                                             rankings_display['_sort_dong'] = 999
+                                        
                                         # 층 정렬 (숫자 추출)
                                         if '층' in rankings_display.columns:
                                             rankings_display['_sort_floor'] = rankings_display['층'].astype(str).apply(
@@ -695,15 +745,17 @@ def main():
                                             )
                                         else:
                                             rankings_display['_sort_floor'] = 999
+                                        
                                         # 같은매물내순위 정렬
                                         if '같은매물내순위' in rankings_display.columns:
                                             rankings_display['_sort_rank'] = pd.to_numeric(rankings_display['같은매물내순위'], errors='coerce').fillna(999)
                                         else:
                                             rankings_display['_sort_rank'] = 999
+                                        
                                         rankings_display = rankings_display.sort_values(
-                                            ['_highlight_sort', '_sort_dong', '_sort_floor', '_sort_rank'],
-                                            ascending=[True, True, True, True]
-                                        ).drop(columns=[col for col in ['_highlight_sort', '_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display.columns]).reset_index(drop=True)
+                                            ['_highlight_sort', '_sort_type', '_sort_dong', '_sort_floor', '_sort_rank'],
+                                            ascending=[True, True, True, True, True]
+                                        ).drop(columns=[col for col in ['_highlight_sort', '_sort_type', '_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display.columns]).reset_index(drop=True)
                                         
                                     else:
                                         # 단일 공인중개사무소인 경우
@@ -726,11 +778,19 @@ def main():
                                             else:
                                                 return [''] * len(row)
                                         
-                                        # 정렬: 색상 → 동 → 층 → 순위 순서
+                                        # 정렬: 하이라이트(색상) 우선 → 거래유형 → 동 → 층 → 같은매물내순위 순서
                                         rankings_display['_highlight_sort'] = rankings_display.apply(
                                             lambda row: 0 if get_rank_color(row) == 'red' else (1 if get_rank_color(row) == 'yellow' else 2), 
                                             axis=1
                                         )
+                                        
+                                        # 거래유형 정렬
+                                        if '거래유형' in rankings_display.columns:
+                                            # 매매=1, 전세=2, 월세=3 순서
+                                            rankings_display['_sort_type'] = rankings_display['거래유형'].map({'매매': 1, '전세': 2, '월세': 3}).fillna(999)
+                                        else:
+                                            rankings_display['_sort_type'] = 999
+                                        
                                         # 동 정렬 (숫자 추출)
                                         if '동' in rankings_display.columns:
                                             rankings_display['_sort_dong'] = rankings_display['동'].astype(str).apply(
@@ -738,6 +798,7 @@ def main():
                                             )
                                         else:
                                             rankings_display['_sort_dong'] = 999
+                                        
                                         # 층 정렬 (숫자 추출)
                                         if '층' in rankings_display.columns:
                                             rankings_display['_sort_floor'] = rankings_display['층'].astype(str).apply(
@@ -745,15 +806,17 @@ def main():
                                             )
                                         else:
                                             rankings_display['_sort_floor'] = 999
+                                        
                                         # 같은매물내순위 정렬
                                         if '같은매물내순위' in rankings_display.columns:
                                             rankings_display['_sort_rank'] = pd.to_numeric(rankings_display['같은매물내순위'], errors='coerce').fillna(999)
                                         else:
                                             rankings_display['_sort_rank'] = 999
+                                        
                                         rankings_display = rankings_display.sort_values(
-                                            ['_highlight_sort', '_sort_dong', '_sort_floor', '_sort_rank'],
-                                            ascending=[True, True, True, True]
-                                        ).drop(columns=[col for col in ['_highlight_sort', '_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display.columns]).reset_index(drop=True)
+                                            ['_highlight_sort', '_sort_type', '_sort_dong', '_sort_floor', '_sort_rank'],
+                                            ascending=[True, True, True, True, True]
+                                        ).drop(columns=[col for col in ['_highlight_sort', '_sort_type', '_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display.columns]).reset_index(drop=True)
                                     
                                     styled_rankings = rankings_display.style.apply(highlight_rank, axis=1)
                                     st.dataframe(styled_rankings, use_container_width=True)

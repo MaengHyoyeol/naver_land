@@ -188,30 +188,34 @@ def main():
                 st.info(f"📊 총 {len(df_raw)}개 매물이 수집되었습니다.")
                 
                 # 파싱 버튼
-                if st.button("🔍 데이터 파싱", use_container_width=True, type="primary"):
-                    start_time = time.time()
-                    log_app(f"데이터 파싱 시작 - 원본 행 수: {len(df_raw)}")
-                    with st.spinner("데이터 파싱 중..."):
-                        parser = DataParser()
-                        try:
-                            df_parsed = parser.parse_dataframe(df_raw)
-                        except Exception as e:
-                            elapsed = time.time() - start_time
-                            log_app(f"데이터 파싱 중 예외 발생 (경과 {elapsed:.2f}s): {e}")
-                            raise
-                    
-                    elapsed = time.time() - start_time
-                    if df_parsed is not None and not df_parsed.empty:
-                        st.session_state.df_parsed = df_parsed
-                        log_app(
-                            f"데이터 파싱 완료 - 파싱된 행 수: {len(df_parsed)}, 경과 시간: {elapsed:.2f}s"
-                        )
-                        st.success(f"✅ {len(df_parsed)}개 매물 파싱 완료! (소요 시간: {elapsed:.1f}초)")
-                        log_app("페이지 새로고침 시작 (st.rerun 호출)")
-                        st.rerun()  # 페이지 새로고침하여 분석 탭에 표시
-                    else:
-                        log_app(f"데이터 파싱 결과 없음 - 경과 시간: {elapsed:.2f}s")
-                        st.warning("⚠️ 파싱된 데이터가 없습니다.")
+                # 이미 파싱된 데이터가 있으면 파싱 버튼을 표시하지 않음
+                if 'df_parsed' not in st.session_state or st.session_state.df_parsed is None:
+                    if st.button("🔍 데이터 파싱", use_container_width=True, type="primary"):
+                        start_time = time.time()
+                        log_app(f"데이터 파싱 시작 - 원본 행 수: {len(df_raw)}")
+                        with st.spinner("데이터 파싱 중..."):
+                            parser = DataParser()
+                            try:
+                                df_parsed = parser.parse_dataframe(df_raw)
+                            except Exception as e:
+                                elapsed = time.time() - start_time
+                                log_app(f"데이터 파싱 중 예외 발생 (경과 {elapsed:.2f}s): {e}")
+                                raise
+                        
+                        elapsed = time.time() - start_time
+                        if df_parsed is not None and not df_parsed.empty:
+                            st.session_state.df_parsed = df_parsed
+                            log_app(
+                                f"데이터 파싱 완료 - 파싱된 행 수: {len(df_parsed)}, 경과 시간: {elapsed:.2f}s"
+                            )
+                            st.success(f"✅ {len(df_parsed)}개 매물 파싱 완료! (소요 시간: {elapsed:.1f}초)")
+                            log_app("페이지 새로고침 시작 (st.rerun 호출)")
+                            st.rerun()  # 페이지 새로고침하여 분석 탭에 표시
+                        else:
+                            log_app(f"데이터 파싱 결과 없음 - 경과 시간: {elapsed:.2f}s")
+                            st.warning("⚠️ 파싱된 데이터가 없습니다.")
+                else:
+                    st.info("✅ 데이터가 이미 파싱되었습니다. '📊 데이터 분석' 탭에서 확인하세요.")
                 
                 # 단지 추가검색 섹션
                 st.markdown("---")

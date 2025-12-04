@@ -390,11 +390,26 @@ def main():
                     selected_floor = '전체'
             
             with col4:
-                if '방향' in df.columns:
-                    directions = ['전체'] + list(df['방향'].dropna().unique())
-                    selected_direction = st.selectbox("방향", directions)
+                if '전용면적' in df.columns:
+                    # 전용면적 정렬을 위한 함수
+                    def extract_area_num(x):
+                        try:
+                            if isinstance(x, str):
+                                num_str = x.replace('㎡', '').replace('m²', '').strip()
+                                return float(num_str)
+                            elif isinstance(x, (int, float)):
+                                return float(x)
+                            else:
+                                return 999.0
+                        except:
+                            return 999.0
+                    
+                    unique_areas = df['전용면적'].dropna().unique()
+                    sorted_areas = sorted(unique_areas, key=extract_area_num)
+                    areas = ['전체'] + list(sorted_areas)
+                    selected_area = st.selectbox("전용면적", areas)
                 else:
-                    selected_direction = '전체'
+                    selected_area = '전체'
             
             with col5:
                 if '확인일' in df.columns:
@@ -422,8 +437,8 @@ def main():
                 df_filtered = df_filtered[df_filtered['동'] == selected_dong]
             if selected_floor != '전체':
                 df_filtered = df_filtered[df_filtered['층'] == selected_floor]
-            if selected_direction != '전체':
-                df_filtered = df_filtered[df_filtered['방향'] == selected_direction]
+            if selected_area != '전체':
+                df_filtered = df_filtered[df_filtered['전용면적'] == selected_area]
             if selected_date != '전체':
                 df_filtered = df_filtered[df_filtered['확인일'] == selected_date]
             if selected_agent != '전체':
@@ -468,8 +483,8 @@ def main():
                 filter_info.append(f"동: {selected_dong}")
             if selected_floor != '전체':
                 filter_info.append(f"층: {selected_floor}")
-            if selected_direction != '전체':
-                filter_info.append(f"방향: {selected_direction}")
+            if selected_area != '전체':
+                filter_info.append(f"전용면적: {selected_area}")
             if selected_date != '전체':
                 filter_info.append(f"확인일: {selected_date}")
             if selected_agent != '전체':
@@ -484,8 +499,8 @@ def main():
                 df_filtered = df_filtered.drop(columns=['순번'])
             
             preferred_order = [
-                '단지명', '동', '층', '총층수', '방향',
-                '거래유형', '가격', '전용면적', '공급면적',
+                '거래유형', '동', '층', '층구분', '전용면적',
+                '단지명', '총층수', '가격', '공급면적',
                 '확인일', '공인중개사무소', '광고사', '원문', '구분'
             ]
             display_cols = [col for col in preferred_order if col in df_filtered.columns]
@@ -543,8 +558,8 @@ def main():
                                 
                                 # 순위 결과 컬럼 순서 지정
                                 rank_preferred_order = [
-                                    '단지명', '동', '층', '총층수', '방향',
-                                    '거래유형', '가격', '전용면적', '공급면적',
+                                    '거래유형', '동', '층', '층구분', '전용면적',
+                                    '단지명', '총층수', '가격', '공급면적',
                                     '확인일', '공인중개사무소', '광고사', '원문', '구분',
                                     '같은매물내순위', '동일매물건수'
                                 ]
@@ -902,8 +917,8 @@ def main():
                                             
                                             # 표시할 컬럼 선택
                                             display_cols_for_same = [
-                                                '단지명', '동', '층', '총층수', '방향',
-                                                '거래유형', '가격', '전용면적', '공급면적',
+                                                '거래유형', '동', '층', '층구분', '전용면적',
+                                                '단지명', '총층수', '가격', '공급면적',
                                                 '확인일', '공인중개사무소', '광고사', 
                                                 '같은매물내순위', '동일매물건수', '원문'
                                             ]

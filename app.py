@@ -63,6 +63,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def log_app(message: str) -> None:
+    """앱 레벨 로그 출력 (타임스탬프 포함)"""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[APP][{ts}] {message}", flush=True)
+
+
 def main():
     """메인 앱"""
     
@@ -183,16 +189,29 @@ def main():
                 
                 # 파싱 버튼
                 if st.button("🔍 데이터 파싱", use_container_width=True, type="primary"):
+                    start_time = time.time()
+                    log_app(f"데이터 파싱 시작 - 원본 행 수: {len(df_raw)}")
                     with st.spinner("데이터 파싱 중..."):
                         parser = DataParser()
-                        df_parsed = parser.parse_dataframe(df_raw)
-                        
-                        if not df_parsed.empty:
-                            st.session_state.df_parsed = df_parsed
-                            st.success(f"✅ {len(df_parsed)}개 매물 파싱 완료!")
-                            st.rerun()  # 페이지 새로고침하여 분석 탭에 표시
-                        else:
-                            st.warning("⚠️ 파싱된 데이터가 없습니다.")
+                        try:
+                            df_parsed = parser.parse_dataframe(df_raw)
+                        except Exception as e:
+                            elapsed = time.time() - start_time
+                            log_app(f"데이터 파싱 중 예외 발생 (경과 {elapsed:.2f}s): {e}")
+                            raise
+                    
+                    elapsed = time.time() - start_time
+                    if df_parsed is not None and not df_parsed.empty:
+                        st.session_state.df_parsed = df_parsed
+                        log_app(
+                            f"데이터 파싱 완료 - 파싱된 행 수: {len(df_parsed)}, 경과 시간: {elapsed:.2f}s"
+                        )
+                        st.success(f"✅ {len(df_parsed)}개 매물 파싱 완료! (소요 시간: {elapsed:.1f}초)")
+                        log_app("페이지 새로고침 시작 (st.rerun 호출)")
+                        st.rerun()  # 페이지 새로고침하여 분석 탭에 표시
+                    else:
+                        log_app(f"데이터 파싱 결과 없음 - 경과 시간: {elapsed:.2f}s")
+                        st.warning("⚠️ 파싱된 데이터가 없습니다.")
                 
                 # 단지 추가검색 섹션
                 st.markdown("---")
@@ -311,7 +330,10 @@ def main():
         st.header("데이터 분석")
         
         if 'df_parsed' in st.session_state and st.session_state.df_parsed is not None:
+            log_app("데이터 분석 탭 렌더링 시작")
+            tab2_start = time.time()
             df = st.session_state.df_parsed
+            log_app(f"데이터프레임 로드 완료 - 행 수: {len(df)}, 경과: {time.time() - tab2_start:.2f}s")
             
             # 통계
             col1, col2, col3, col4 = st.columns(4)
@@ -337,6 +359,8 @@ def main():
             st.markdown("---")
             
             # 필터
+            log_app("필터 섹션 렌더링 시작")
+            filter_start = time.time()
             st.subheader("🔍 필터")
             col1, col2, col3, col4, col5, col6 = st.columns(6)
             
@@ -383,6 +407,8 @@ def main():
                     selected_agent = '전체'
             
             # 필터링
+            log_app(f"필터 UI 생성 완료 - 경과: {time.time() - filter_start:.2f}s")
+            filter_process_start = time.time()
             df_filtered = df.copy()
             original_count = len(df_filtered)
             
@@ -400,9 +426,11 @@ def main():
                 df_filtered = df_filtered[df_filtered['공인중개사무소'] == selected_agent]
             
             filtered_count = len(df_filtered)
+            log_app(f"필터링 완료 - 필터링 후: {filtered_count}개, 경과: {time.time() - filter_process_start:.2f}s")
 
             # 동일 매물 중 최신 확인일만 유지
             # 같은 매물 제거 기준: 동, 층, 총층수, 거래유형, 전용면적, 공급면적이 모두 같은 경우
+            dedup_start = time.time()
             dedup_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적', '공인중개사무소', '광고사']
             if all(col in df_filtered.columns for col in dedup_key) and '확인일' in df_filtered.columns:
                 before_dedup_count = len(df_filtered)
@@ -421,6 +449,9 @@ def main():
             else:
                 before_dedup_count = filtered_count
                 after_dedup_count = filtered_count
+            
+            log_app(f"중복 제거 완료 - 제거 후: {after_dedup_count}개, 경과: {time.time() - dedup_start:.2f}s")
+            log_app(f"데이터 분석 탭 전체 렌더링 완료 - 총 경과: {time.time() - tab2_start:.2f}s")
             
             st.markdown("---")
             st.subheader("📊 필터링된 데이터")

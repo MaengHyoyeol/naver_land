@@ -513,6 +513,7 @@ def main():
             st.subheader("🏅 내 공인중개사 순위")
             agent_input = st.text_area(
                 "내 공인중개사무소 이름을 입력하세요 (여러 개 입력 가능, 한 줄에 하나씩 또는 쉼표로 구분)",
+                value="국민공인중개사사무소\n중동역래미안어반비스타공인중개사사무소",
                 placeholder="예:\n영등포아트자이공인중개사사무소\n래미안탑부동산공인중개사사무소",
                 key="agent_name_input",
                 height=100

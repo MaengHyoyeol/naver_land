@@ -377,14 +377,48 @@ def main():
             
             with col2:
                 if '동' in df.columns:
-                    dongs = ['전체'] + list(df['동'].dropna().unique())
+                    # 동 숫자 정렬 함수
+                    def extract_dong_num(x):
+                        try:
+                            if isinstance(x, str):
+                                num_match = re.findall(r'\d+', x)
+                                return int(num_match[0]) if num_match else 999
+                            else:
+                                return 999
+                        except:
+                            return 999
+                    
+                    unique_dongs = df['동'].dropna().unique()
+                    sorted_dongs = sorted(unique_dongs, key=extract_dong_num)
+                    dongs = ['전체'] + list(sorted_dongs)
                     selected_dong = st.selectbox("동", dongs)
                 else:
                     selected_dong = '전체'
             
             with col3:
                 if '층' in df.columns:
-                    floors = ['전체'] + sorted(df['층'].dropna().unique(), key=lambda x: str(x))
+                    # 층 숫자 정렬 함수
+                    def extract_floor_num(x):
+                        try:
+                            if isinstance(x, str):
+                                # "저층", "중층", "고층" 처리
+                                if '저층' in x or x == '저':
+                                    return 0
+                                elif '중층' in x or x == '중':
+                                    return 500
+                                elif '고층' in x or x == '고':
+                                    return 1000
+                                # 숫자 추출
+                                num_match = re.findall(r'\d+', x)
+                                return int(num_match[0]) if num_match else 999
+                            else:
+                                return 999
+                        except:
+                            return 999
+                    
+                    unique_floors = df['층'].dropna().unique()
+                    sorted_floors = sorted(unique_floors, key=extract_floor_num)
+                    floors = ['전체'] + list(sorted_floors)
                     selected_floor = st.selectbox("층", floors)
                 else:
                     selected_floor = '전체'
@@ -664,13 +698,16 @@ def main():
                                 if '같은매물내순위' in rankings_display.columns:
                                     # 여러 공인중개사무소가 입력된 경우, 같은 매물 내 최소 순위 계산
                                     if len(agent_names) > 1:
-                                        # 같은 매물 그룹별로 최소 순위 계산
+                                        # 같은 매물 그룹별로 최소 순위와 최대 순위 계산
                                         min_rank_by_property = {}
+                                        max_rank_by_property = {}
                                         
                                         for idx, row in combined_rankings.iterrows():
-                                            # 같은 매물 그룹 키 생성
+                                            # 같은 매물 그룹 키 생성 (광고사 제외 - 광고사가 다른 것도 동일 매물로 간주)
                                             property_key_parts = []
                                             for key_col in same_property_key:
+                                                if key_col == '광고사':  # 광고사는 제외
+                                                    continue
                                                 if key_col in row.index:
                                                     val = row[key_col]
                                                     property_key_parts.append(str(val) if pd.notna(val) else 'None')
@@ -679,30 +716,40 @@ def main():
                                             rank_value = row.get('같은매물내순위')
                                             
                                             if pd.notna(rank_value):
-                                                # 같은 매물 그룹에서 최소 순위 저장
+                                                # 같은 매물 그룹에서 최소/최대 순위 저장
                                                 if property_key in min_rank_by_property:
                                                     min_rank_by_property[property_key] = min(
                                                         min_rank_by_property[property_key], 
                                                         rank_value
                                                     )
+                                                    max_rank_by_property[property_key] = max(
+                                                        max_rank_by_property[property_key],
+                                                        rank_value
+                                                    )
                                                 else:
                                                     min_rank_by_property[property_key] = rank_value
+                                                    max_rank_by_property[property_key] = rank_value
                                         
                                         # 순위에 따른 색상 판단 함수
                                         def get_rank_color(row):
                                             property_key_parts = []
                                             for key_col in same_property_key:
+                                                if key_col == '광고사':  # 광고사는 제외
+                                                    continue
                                                 if key_col in row.index:
                                                     val = row[key_col]
                                                     property_key_parts.append(str(val) if pd.notna(val) else 'None')
                                             
                                             property_key = tuple(property_key_parts)
                                             min_rank = min_rank_by_property.get(property_key, 0)
+                                            max_rank = max_rank_by_property.get(property_key, 0)
                                             
-                                            if min_rank >= 3:
-                                                return 'red'  # 3위 이상: 빨간색
-                                            elif min_rank >= 4:
-                                                return 'yellow'  # 4-5위: 노란색
+                                            # 빨간색: min_rank >= 3 AND max_rank >= 3
+                                            if min_rank >= 3 and max_rank >= 3:
+                                                return 'red'
+                                            # 노란색: min_rank >= 4 AND min_rank <= 5 AND max_rank >= 4 AND max_rank <= 5
+                                            elif min_rank >= 4 and min_rank <= 5 and max_rank >= 4 and max_rank <= 5:
+                                                return 'yellow'
                                             else:
                                                 return 'white'  # 그 외: 하얀색
                                         
@@ -758,14 +805,58 @@ def main():
                                         
                                     else:
                                         # 단일 공인중개사무소인 경우
-                                        def get_rank_color(row):
+                                        # 같은 매물 그룹별로 최소/최대 순위 계산 (광고사 제외)
+                                        min_rank_by_property = {}
+                                        max_rank_by_property = {}
+                                        
+                                        for idx, row in combined_rankings.iterrows():
+                                            # 같은 매물 그룹 키 생성 (광고사 제외)
+                                            property_key_parts = []
+                                            for key_col in same_property_key:
+                                                if key_col == '광고사':  # 광고사는 제외
+                                                    continue
+                                                if key_col in row.index:
+                                                    val = row[key_col]
+                                                    property_key_parts.append(str(val) if pd.notna(val) else 'None')
+                                            
+                                            property_key = tuple(property_key_parts)
                                             rank_value = row.get('같은매물내순위')
+                                            
                                             if pd.notna(rank_value):
-                                                if rank_value >= 3:
-                                                    return 'red'  # 3위 이상: 빨간색
-                                                elif rank_value >= 4:
-                                                    return 'yellow'  # 4-5위: 노란색
-                                            return 'white'  # 그 외: 하얀색
+                                                if property_key in min_rank_by_property:
+                                                    min_rank_by_property[property_key] = min(
+                                                        min_rank_by_property[property_key],
+                                                        rank_value
+                                                    )
+                                                    max_rank_by_property[property_key] = max(
+                                                        max_rank_by_property[property_key],
+                                                        rank_value
+                                                    )
+                                                else:
+                                                    min_rank_by_property[property_key] = rank_value
+                                                    max_rank_by_property[property_key] = rank_value
+                                        
+                                        def get_rank_color(row):
+                                            property_key_parts = []
+                                            for key_col in same_property_key:
+                                                if key_col == '광고사':  # 광고사는 제외
+                                                    continue
+                                                if key_col in row.index:
+                                                    val = row[key_col]
+                                                    property_key_parts.append(str(val) if pd.notna(val) else 'None')
+                                            
+                                            property_key = tuple(property_key_parts)
+                                            min_rank = min_rank_by_property.get(property_key, 0)
+                                            max_rank = max_rank_by_property.get(property_key, 0)
+                                            
+                                            # 빨간색: min_rank >= 3 AND max_rank >= 3
+                                            if min_rank >= 3 and max_rank >= 3:
+                                                return 'red'
+                                            # 노란색: min_rank >= 4 AND min_rank <= 5 AND max_rank >= 4 AND max_rank <= 5
+                                            elif min_rank >= 4 and min_rank <= 5 and max_rank >= 4 and max_rank <= 5:
+                                                return 'yellow'
+                                            else:
+                                                return 'white'  # 그 외: 하얀색
                                         
                                         # 하이라이트 함수
                                         def highlight_rank(row):

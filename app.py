@@ -698,9 +698,9 @@ def main():
                                 if '같은매물내순위' in rankings_display.columns:
                                     # 여러 공인중개사무소가 입력된 경우, 같은 매물 내 최소 순위 계산
                                     if len(agent_names) > 1:
-                                        # 같은 매물 그룹별로 최소 순위와 최대 순위 계산
-                                        min_rank_by_property = {}
-                                        max_rank_by_property = {}
+                                        # 같은 매물 그룹별로 내가 정한 모든 공인중개사무소의 순위 저장
+                                        # 동일매물 그룹 키: 광고사 제외
+                                        property_ranks_by_agents = {}  # {property_key: {agent_name: rank}}
                                         
                                         for idx, row in combined_rankings.iterrows():
                                             # 같은 매물 그룹 키 생성 (광고사 제외 - 광고사가 다른 것도 동일 매물로 간주)
@@ -714,21 +714,12 @@ def main():
                                             
                                             property_key = tuple(property_key_parts)
                                             rank_value = row.get('같은매물내순위')
+                                            agent_name = row.get('공인중개사무소')
                                             
-                                            if pd.notna(rank_value):
-                                                # 같은 매물 그룹에서 최소/최대 순위 저장
-                                                if property_key in min_rank_by_property:
-                                                    min_rank_by_property[property_key] = min(
-                                                        min_rank_by_property[property_key], 
-                                                        rank_value
-                                                    )
-                                                    max_rank_by_property[property_key] = max(
-                                                        max_rank_by_property[property_key],
-                                                        rank_value
-                                                    )
-                                                else:
-                                                    min_rank_by_property[property_key] = rank_value
-                                                    max_rank_by_property[property_key] = rank_value
+                                            if pd.notna(rank_value) and agent_name in agent_names:
+                                                if property_key not in property_ranks_by_agents:
+                                                    property_ranks_by_agents[property_key] = {}
+                                                property_ranks_by_agents[property_key][agent_name] = rank_value
                                         
                                         # 순위에 따른 색상 판단 함수
                                         def get_rank_color(row):
@@ -741,14 +732,21 @@ def main():
                                                     property_key_parts.append(str(val) if pd.notna(val) else 'None')
                                             
                                             property_key = tuple(property_key_parts)
-                                            min_rank = min_rank_by_property.get(property_key, 0)
-                                            max_rank = max_rank_by_property.get(property_key, 0)
+                                            agent_ranks = property_ranks_by_agents.get(property_key, {})
                                             
-                                            # 빨간색: min_rank >= 3 AND max_rank >= 3
-                                            if min_rank >= 3 and max_rank >= 3:
+                                            # 내가 정한 모든 공인중개사무소의 순위 확인
+                                            if len(agent_ranks) < len(agent_names):
+                                                # 일부 공인중개사무소만 해당 매물에 있는 경우
+                                                return 'white'
+                                            
+                                            # 모든 공인중개사무소의 순위 리스트
+                                            all_ranks = list(agent_ranks.values())
+                                            
+                                            # 빨간색: 모든 공인중개사무소가 3위 이상
+                                            if all(rank >= 3 for rank in all_ranks):
                                                 return 'red'
-                                            # 노란색: min_rank >= 4 AND min_rank <= 5 AND max_rank >= 4 AND max_rank <= 5
-                                            elif min_rank >= 4 and min_rank <= 5 and max_rank >= 4 and max_rank <= 5:
+                                            # 노란색: 모든 공인중개사무소가 4~5위
+                                            elif all(rank >= 4 and rank <= 5 for rank in all_ranks):
                                                 return 'yellow'
                                             else:
                                                 return 'white'  # 그 외: 하얀색
@@ -805,9 +803,10 @@ def main():
                                         
                                     else:
                                         # 단일 공인중개사무소인 경우
-                                        # 같은 매물 그룹별로 최소/최대 순위 계산 (광고사 제외)
-                                        min_rank_by_property = {}
-                                        max_rank_by_property = {}
+                                        # 같은 매물 그룹별로 해당 공인중개사무소의 순위 저장 (광고사 제외)
+                                        property_rank_by_agent = {}  # {property_key: rank}
+                                        
+                                        agent_name = agent_names[0]  # 단일 공인중개사무소
                                         
                                         for idx, row in combined_rankings.iterrows():
                                             # 같은 매물 그룹 키 생성 (광고사 제외)
@@ -823,18 +822,15 @@ def main():
                                             rank_value = row.get('같은매물내순위')
                                             
                                             if pd.notna(rank_value):
-                                                if property_key in min_rank_by_property:
-                                                    min_rank_by_property[property_key] = min(
-                                                        min_rank_by_property[property_key],
-                                                        rank_value
-                                                    )
-                                                    max_rank_by_property[property_key] = max(
-                                                        max_rank_by_property[property_key],
-                                                        rank_value
-                                                    )
+                                                # 같은 매물 그룹에서 해당 공인중개사무소의 순위 저장
+                                                if property_key not in property_rank_by_agent:
+                                                    property_rank_by_agent[property_key] = rank_value
                                                 else:
-                                                    min_rank_by_property[property_key] = rank_value
-                                                    max_rank_by_property[property_key] = rank_value
+                                                    # 같은 매물에 여러 개가 있으면 최소 순위 사용
+                                                    property_rank_by_agent[property_key] = min(
+                                                        property_rank_by_agent[property_key],
+                                                        rank_value
+                                                    )
                                         
                                         def get_rank_color(row):
                                             property_key_parts = []
@@ -846,14 +842,13 @@ def main():
                                                     property_key_parts.append(str(val) if pd.notna(val) else 'None')
                                             
                                             property_key = tuple(property_key_parts)
-                                            min_rank = min_rank_by_property.get(property_key, 0)
-                                            max_rank = max_rank_by_property.get(property_key, 0)
+                                            rank = property_rank_by_agent.get(property_key, 0)
                                             
-                                            # 빨간색: min_rank >= 3 AND max_rank >= 3
-                                            if min_rank >= 3 and max_rank >= 3:
+                                            # 빨간색: 3위 이상
+                                            if rank >= 3:
                                                 return 'red'
-                                            # 노란색: min_rank >= 4 AND min_rank <= 5 AND max_rank >= 4 AND max_rank <= 5
-                                            elif min_rank >= 4 and min_rank <= 5 and max_rank >= 4 and max_rank <= 5:
+                                            # 노란색: 4~5위
+                                            elif rank >= 4 and rank <= 5:
                                                 return 'yellow'
                                             else:
                                                 return 'white'  # 그 외: 하얀색

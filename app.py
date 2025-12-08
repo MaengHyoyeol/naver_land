@@ -98,7 +98,7 @@ def main():
         """)
     
     # 메인 영역
-    tab1, tab2, tab3 = st.tabs(["🔍 크롤링", "📊 데이터 분석", "📁 파일 관리"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🔍 크롤링", "📊 광고물 검색", "🏠 매물 검색", "📁 파일 관리"])
     
     with tab1:
         st.header("단지 검색 및 크롤링")
@@ -331,7 +331,7 @@ def main():
                 st.warning("⚠️ 수집된 데이터가 비어있습니다.")
     
     with tab2:
-        st.header("데이터 분석")
+        st.header("광고물 검색")
         
         if 'df_parsed' in st.session_state and st.session_state.df_parsed is not None:
             log_app("데이터 분석 탭 렌더링 시작")
@@ -738,10 +738,6 @@ def main():
                                             current_agent = row.get('공인중개사무소')
                                             current_rank = row.get('같은매물내순위')
                                             
-                                            # 현재 행이 입력한 공인중개사무소가 아니거나 순위가 없으면 하얀색
-                                            if current_agent not in agent_names or pd.isna(current_rank):
-                                                return 'white'
-                                            
                                             # 내가 정한 모든 공인중개사무소의 순위 확인
                                             if len(agent_ranks) < len(agent_names):
                                                 # 일부 공인중개사무소만 해당 매물에 있는 경우
@@ -750,16 +746,17 @@ def main():
                                             # 모든 공인중개사무소의 순위 리스트
                                             all_ranks = list(agent_ranks.values())
                                             
-                                            # 동일매물 내에서 모든 공인중개사무소가 3위 이상인지 확인
+                                            # 동일매물 내에서 모든 공인중개사무소가 3위 이상인지 확인 (최소값이 모두 3 이상)
                                             all_above_3 = all(rank >= 3 for rank in all_ranks)
                                             # 동일매물 내에서 모든 공인중개사무소가 4~5위인지 확인
                                             all_4_to_5 = all(rank >= 4 and rank <= 5 for rank in all_ranks)
                                             
-                                            # 빨간색: 모든 공인중개사무소가 3위 이상 AND 현재 매물이 3위 이상
-                                            if all_above_3 and current_rank >= 3:
+                                            # 빨간색: 동일 매물 내에서 입력한 모든 공인중개사무소의 순위가 3위 이상이면
+                                            # 그 매물의 모든 행을 하이라이트 (현재 행이 입력한 목록에 포함되어 있지 않아도)
+                                            if all_above_3:
                                                 return 'red'
-                                            # 노란색: 모든 공인중개사무소가 4~5위 AND 현재 매물이 4~5위
-                                            elif all_4_to_5 and current_rank >= 4 and current_rank <= 5:
+                                            # 노란색: 모든 공인중개사무소가 4~5위인 경우
+                                            elif all_4_to_5:
                                                 return 'yellow'
                                             else:
                                                 return 'white'  # 그 외: 하얀색
@@ -1147,6 +1144,314 @@ def main():
             st.info("👈 먼저 크롤링을 실행해주세요!")
     
     with tab3:
+        st.header("매물 검색")
+        
+        if 'df_parsed' in st.session_state and st.session_state.df_parsed is not None:
+            log_app("매물 검색 탭 렌더링 시작")
+            tab3_start = time.time()
+            df = st.session_state.df_parsed.copy()
+            log_app(f"데이터프레임 로드 완료 - 행 수: {len(df)}, 경과: {time.time() - tab3_start:.2f}s")
+            
+            # 광고사 칼럼 제거
+            if '광고사' in df.columns:
+                df = df.drop(columns=['광고사'])
+            
+            # 통계
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("총 매물수", len(df))
+            
+            with col2:
+                if '거래유형' in df.columns:
+                    sale_count = len(df[df['거래유형'] == '매매']) if '매매' in df['거래유형'].values else 0
+                    st.metric("매매", sale_count)
+            
+            with col3:
+                if '거래유형' in df.columns:
+                    rent_count = len(df[df['거래유형'] == '전세']) if '전세' in df['거래유형'].values else 0
+                    st.metric("전세", rent_count)
+            
+            with col4:
+                if '거래유형' in df.columns:
+                    monthly_count = len(df[df['거래유형'] == '월세']) if '월세' in df['거래유형'].values else 0
+                    st.metric("월세", monthly_count)
+            
+            st.markdown("---")
+            
+            # 필터
+            log_app("필터 섹션 렌더링 시작")
+            filter_start = time.time()
+            st.subheader("🔍 필터")
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
+            with col1:
+                if '거래유형' in df.columns:
+                    trade_types = ['전체'] + list(df['거래유형'].dropna().unique())
+                    selected_type = st.selectbox("거래유형", trade_types, key="property_type")
+                else:
+                    selected_type = '전체'
+            
+            with col2:
+                if '동' in df.columns:
+                    # 동 숫자 정렬 함수
+                    def extract_dong_num(x):
+                        try:
+                            if isinstance(x, str):
+                                num_match = re.findall(r'\d+', x)
+                                return int(num_match[0]) if num_match else 999
+                            else:
+                                return 999
+                        except:
+                            return 999
+                    
+                    unique_dongs = df['동'].dropna().unique()
+                    sorted_dongs = sorted(unique_dongs, key=extract_dong_num)
+                    dongs = ['전체'] + list(sorted_dongs)
+                    selected_dong = st.selectbox("동", dongs, key="property_dong")
+                else:
+                    selected_dong = '전체'
+            
+            with col3:
+                if '층' in df.columns:
+                    # 층 숫자 정렬 함수
+                    def extract_floor_num(x):
+                        try:
+                            if isinstance(x, str):
+                                # "저층", "중층", "고층" 처리
+                                if '저층' in x or x == '저':
+                                    return 0
+                                elif '중층' in x or x == '중':
+                                    return 500
+                                elif '고층' in x or x == '고':
+                                    return 1000
+                                # 숫자 추출
+                                num_match = re.findall(r'\d+', x)
+                                return int(num_match[0]) if num_match else 999
+                            else:
+                                return 999
+                        except:
+                            return 999
+                    
+                    unique_floors = df['층'].dropna().unique()
+                    sorted_floors = sorted(unique_floors, key=extract_floor_num)
+                    floors = ['전체'] + list(sorted_floors)
+                    selected_floor = st.selectbox("층", floors, key="property_floor")
+                else:
+                    selected_floor = '전체'
+            
+            with col4:
+                if '전용면적' in df.columns:
+                    # 전용면적 정렬을 위한 함수
+                    def extract_area_num(x):
+                        try:
+                            if isinstance(x, str):
+                                num_str = x.replace('㎡', '').replace('m²', '').strip()
+                                return float(num_str)
+                            elif isinstance(x, (int, float)):
+                                return float(x)
+                            else:
+                                return 999.0
+                        except:
+                            return 999.0
+                    
+                    unique_areas = df['전용면적'].dropna().unique()
+                    sorted_areas = sorted(unique_areas, key=extract_area_num)
+                    areas = ['전체'] + list(sorted_areas)
+                    selected_area = st.selectbox("전용면적", areas, key="property_area")
+                else:
+                    selected_area = '전체'
+            
+            with col5:
+                if '확인일' in df.columns:
+                    dates = ['전체'] + sorted(df['확인일'].dropna().unique())
+                    selected_date = st.selectbox("확인일", dates, key="property_date")
+                else:
+                    selected_date = '전체'
+            
+            # 필터링
+            log_app(f"필터 UI 생성 완료 - 경과: {time.time() - filter_start:.2f}s")
+            filter_process_start = time.time()
+            df_filtered = df.copy()
+            original_count = len(df_filtered)
+            
+            if selected_type != '전체':
+                df_filtered = df_filtered[df_filtered['거래유형'] == selected_type]
+            if selected_dong != '전체':
+                df_filtered = df_filtered[df_filtered['동'] == selected_dong]
+            if selected_floor != '전체':
+                df_filtered = df_filtered[df_filtered['층'] == selected_floor]
+            if selected_area != '전체':
+                df_filtered = df_filtered[df_filtered['전용면적'] == selected_area]
+            if selected_date != '전체':
+                df_filtered = df_filtered[df_filtered['확인일'] == selected_date]
+            
+            filtered_count = len(df_filtered)
+            log_app(f"필터링 완료 - 필터링 후: {filtered_count}개, 경과: {time.time() - filter_process_start:.2f}s")
+
+            # 동일 매물 중 최신 확인일만 유지
+            # 같은 매물 제거 기준: 동, 층, 총층수, 거래유형, 전용면적, 공급면적 (광고사 제외)
+            dedup_start = time.time()
+            dedup_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적', '공인중개사무소']
+            if all(col in df_filtered.columns for col in dedup_key) and '확인일' in df_filtered.columns:
+                before_dedup_count = len(df_filtered)
+                df_dedup = df_filtered.copy()
+                parsed_dates = pd.to_datetime(
+                    df_dedup['확인일'].astype(str).str.replace('.', '-', regex=False),
+                    format='%y-%m-%d',
+                    errors='coerce'
+                )
+                df_dedup['_확인일_dt'] = parsed_dates
+                df_dedup = df_dedup.sort_values('_확인일_dt', ascending=False)
+                df_dedup = df_dedup.drop_duplicates(subset=dedup_key, keep='first')
+                df_dedup = df_dedup.drop(columns=['_확인일_dt'])
+                df_filtered = df_dedup.reset_index(drop=True)
+                after_dedup_count = len(df_filtered)
+            else:
+                before_dedup_count = filtered_count
+                after_dedup_count = filtered_count
+            
+            log_app(f"중복 제거 완료 - 제거 후: {after_dedup_count}개, 경과: {time.time() - dedup_start:.2f}s")
+            log_app(f"매물 검색 탭 전체 렌더링 완료 - 총 경과: {time.time() - tab3_start:.2f}s")
+            
+            st.markdown("---")
+            st.subheader("📊 필터링된 데이터")
+            
+            # 필터링 정보 표시
+            filter_info = []
+            if selected_type != '전체':
+                filter_info.append(f"거래유형: {selected_type}")
+            if selected_dong != '전체':
+                filter_info.append(f"동: {selected_dong}")
+            if selected_floor != '전체':
+                filter_info.append(f"층: {selected_floor}")
+            if selected_area != '전체':
+                filter_info.append(f"전용면적: {selected_area}")
+            if selected_date != '전체':
+                filter_info.append(f"확인일: {selected_date}")
+            
+            if filter_info:
+                st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 → 중복 제거 후: {after_dedup_count}개 (전체: {original_count}개)")
+            else:
+                st.info(f"📊 전체 데이터: {original_count}개 → 중복 제거 후: {after_dedup_count}개")
+            
+            # 순번 컬럼 제거
+            if '순번' in df_filtered.columns:
+                df_filtered = df_filtered.drop(columns=['순번'])
+            
+            # 필터링된 데이터 정렬: 거래유형, 동, 층, 총층수, 전용면적 순서
+            sort_columns = []
+            temp_sort_cols = []
+            
+            if '거래유형' in df_filtered.columns:
+                sort_columns.append('거래유형')
+            
+            if '동' in df_filtered.columns:
+                df_filtered['_sort_dong'] = df_filtered['동'].astype(str).apply(
+                    lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                )
+                sort_columns.append('_sort_dong')
+                temp_sort_cols.append('_sort_dong')
+            
+            if '층' in df_filtered.columns:
+                df_filtered['_sort_floor'] = df_filtered['층'].astype(str).apply(
+                    lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                )
+                sort_columns.append('_sort_floor')
+                temp_sort_cols.append('_sort_floor')
+            
+            if '총층수' in df_filtered.columns:
+                df_filtered['_sort_total_floor'] = df_filtered['총층수'].astype(str).apply(
+                    lambda x: int(re.findall(r'\d+', x)[0]) if re.findall(r'\d+', x) else 999
+                )
+                sort_columns.append('_sort_total_floor')
+                temp_sort_cols.append('_sort_total_floor')
+            
+            if '전용면적' in df_filtered.columns:
+                df_filtered['_sort_area'] = df_filtered['전용면적'].astype(str).apply(
+                    lambda x: float(re.findall(r'\d+\.?\d*', x)[0]) if re.findall(r'\d+\.?\d*', x) else 0
+                )
+                sort_columns.append('_sort_area')
+                temp_sort_cols.append('_sort_area')
+            
+            # 정렬 실행
+            if sort_columns:
+                df_filtered = df_filtered.sort_values(sort_columns, ascending=[True] * len(sort_columns))
+                # 정렬용 임시 컬럼 제거
+                df_filtered = df_filtered.drop(columns=[col for col in temp_sort_cols if col in df_filtered.columns])
+            
+            preferred_order = [
+                '거래유형', '동', '층', '층구분', '전용면적',
+                '단지명', '총층수', '가격', '공급면적',
+                '확인일', '공인중개사무소', '원문', '구분'
+            ]
+            display_cols = [col for col in preferred_order if col in df_filtered.columns]
+            if display_cols:
+                st.dataframe(df_filtered[display_cols], use_container_width=True)
+            else:
+                st.dataframe(df_filtered, use_container_width=True)
+            
+            # 공인중개사무소별 매물 개수 Top 3
+            st.markdown("---")
+            st.subheader("🏆 매물을 많이 가지고 있는 공인중개사무소 Top 3")
+            
+            if '공인중개사무소' in df_filtered.columns:
+                # 공인중개사무소별 매물 개수 집계
+                agent_counts = df_filtered['공인중개사무소'].value_counts().head(3)
+                
+                if len(agent_counts) > 0:
+                    # Top 3를 컬럼으로 표시
+                    top_cols = st.columns(3)
+                    
+                    for idx, (agent_name, count) in enumerate(agent_counts.items()):
+                        with top_cols[idx]:
+                            st.metric(
+                                label=f"🥇 Top {idx + 1}" if idx < 3 else "",
+                                value=agent_name if agent_name else "정보없음",
+                                delta=f"{count}개 매물"
+                            )
+                    
+                    # 상세 정보를 테이블로 표시
+                    agent_stats_df = pd.DataFrame({
+                        '순위': range(1, len(agent_counts) + 1),
+                        '공인중개사무소': agent_counts.index.tolist(),
+                        '매물 개수': agent_counts.values.tolist()
+                    })
+                    st.dataframe(agent_stats_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("공인중개사무소 정보가 없습니다.")
+            else:
+                st.info("공인중개사무소 컬럼이 없습니다.")
+            
+            # 다운로드 버튼
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                csv = df_filtered.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 CSV 다운로드",
+                    data=csv,
+                    file_name=f"{st.session_state.get('keyword', '매물')}_매물검색_필터링.csv",
+                    mime="text/csv"
+                )
+            
+            with col2:
+                # Excel 다운로드를 위한 임시 파일 생성
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                    df_filtered.to_excel(tmp.name, index=False, engine='openpyxl')
+                    with open(tmp.name, 'rb') as f:
+                        st.download_button(
+                            label="📥 Excel 다운로드",
+                            data=f.read(),
+                            file_name=f"{st.session_state.get('keyword', '매물')}_매물검색_필터링.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+        
+        else:
+            st.info("👈 먼저 크롤링을 실행해주세요!")
+    
+    with tab4:
         st.header("파일 관리")
         
         # data 디렉토리 파일 목록

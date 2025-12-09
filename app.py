@@ -446,31 +446,7 @@ def main():
             
             filtered_count = len(df_filtered)
             log_app(f"필터링 완료 - 필터링 후: {filtered_count}개, 경과: {time.time() - filter_process_start:.2f}s")
-
-            # 동일 매물 중 최신 확인일만 유지
-            # 같은 매물 제거 기준: 동, 층, 총층수, 거래유형, 전용면적, 공급면적이 모두 같은 경우
-            dedup_start = time.time()
-            dedup_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적', '공인중개사무소', '광고사']
-            if all(col in df_filtered.columns for col in dedup_key) and '확인일' in df_filtered.columns:
-                before_dedup_count = len(df_filtered)
-                df_dedup = df_filtered.copy()
-                parsed_dates = pd.to_datetime(
-                    df_dedup['확인일'].astype(str).str.replace('.', '-', regex=False),
-                    format='%y-%m-%d',
-                    errors='coerce'
-                )
-                df_dedup['_확인일_dt'] = parsed_dates
-                df_dedup = df_dedup.sort_values('_확인일_dt', ascending=False)
-                df_dedup = df_dedup.drop_duplicates(subset=dedup_key, keep='first')
-                df_dedup = df_dedup.drop(columns=['_확인일_dt'])
-                df_filtered = df_dedup.reset_index(drop=True)
-                after_dedup_count = len(df_filtered)
-            else:
-                before_dedup_count = filtered_count
-                after_dedup_count = filtered_count
-            
-            log_app(f"중복 제거 완료 - 제거 후: {after_dedup_count}개, 경과: {time.time() - dedup_start:.2f}s")
-            log_app(f"데이터 분석 탭 전체 렌더링 완료 - 총 경과: {time.time() - tab2_start:.2f}s")
+            log_app(f"광고물 검색 탭 전체 렌더링 완료 - 총 경과: {time.time() - tab2_start:.2f}s")
             
             st.markdown("---")
             st.subheader("📊 필터링된 데이터")
@@ -491,9 +467,9 @@ def main():
                 filter_info.append(f"공인중개사무소: {selected_agent}")
             
             if filter_info:
-                st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 → 중복 제거 후: {after_dedup_count}개 (전체: {original_count}개)")
+                st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 (전체: {original_count}개)")
             else:
-                st.info(f"📊 전체 데이터: {original_count}개 → 중복 제거 후: {after_dedup_count}개")
+                st.info(f"📊 전체 데이터: {original_count}개")
             # 순번 컬럼 제거
             if '순번' in df_filtered.columns:
                 df_filtered = df_filtered.drop(columns=['순번'])
@@ -1261,10 +1237,14 @@ def main():
                 # 정렬용 임시 컬럼 제거
                 df_filtered = df_filtered.drop(columns=[col for col in temp_sort_cols if col in df_filtered.columns])
             
+            # 확인일 칼럼 제거
+            if '확인일' in df_filtered.columns:
+                df_filtered = df_filtered.drop(columns=['확인일'])
+            
             preferred_order = [
                 '거래유형', '동', '층', '층구분', '전용면적',
                 '단지명', '총층수', '가격', '공급면적',
-                '확인일', '공인중개사무소', '원문', '구분'
+                '공인중개사무소', '원문', '구분'
             ]
             display_cols = [col for col in preferred_order if col in df_filtered.columns]
             if display_cols:

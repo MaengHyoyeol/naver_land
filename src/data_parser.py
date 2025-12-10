@@ -122,6 +122,14 @@ class DataParser:
                 agent_name = line
                 break
         if agent_name:
+            # "공인중개사무소" 또는 "공인중개사사무소" 앞의 단어만 추출
+            # 예: "영등포아트자이공인중개사사무소" -> "영등포아트자이"
+            if '공인중개사무소' in agent_name:
+                agent_name = agent_name.split('공인중개사무소')[0]
+            elif '공인중개사사무소' in agent_name:
+                agent_name = agent_name.split('공인중개사사무소')[0]
+            elif '공인중개사' in agent_name:
+                agent_name = agent_name.split('공인중개사')[0]
             data['공인중개사무소'] = agent_name
         
         # 광고사 추출 (5번째 줄의 "*제공" 정보)

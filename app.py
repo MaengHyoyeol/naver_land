@@ -446,6 +446,31 @@ def main():
             
             filtered_count = len(df_filtered)
             log_app(f"필터링 완료 - 필터링 후: {filtered_count}개, 경과: {time.time() - filter_process_start:.2f}s")
+
+            # 중복 매물 제거 (기본적으로 수행)
+            dedup_start = time.time()
+            # 같은 매물 제거 기준: 동, 층, 총층수, 거래유형, 전용면적, 공급면적, 공인중개사무소, 광고사
+            dedup_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적', '공인중개사무소', '광고사']
+            if all(col in df_filtered.columns for col in dedup_key) and '확인일' in df_filtered.columns:
+                before_dedup_count = len(df_filtered)
+                df_dedup = df_filtered.copy()
+                parsed_dates = pd.to_datetime(
+                    df_dedup['확인일'].astype(str).str.replace('.', '-', regex=False),
+                    format='%y-%m-%d',
+                    errors='coerce'
+                )
+                df_dedup['_확인일_dt'] = parsed_dates
+                df_dedup = df_dedup.sort_values('_확인일_dt', ascending=False)
+                df_dedup = df_dedup.drop_duplicates(subset=dedup_key, keep='first')
+                df_dedup = df_dedup.drop(columns=['_확인일_dt'])
+                df_filtered = df_dedup.reset_index(drop=True)
+                after_dedup_count = len(df_filtered)
+            else:
+                before_dedup_count = filtered_count
+                after_dedup_count = filtered_count
+            
+            log_app(f"중복 제거 완료 - 제거 후: {after_dedup_count}개, 경과: {time.time() - dedup_start:.2f}s")
+            
             log_app(f"광고물 검색 탭 전체 렌더링 완료 - 총 경과: {time.time() - tab2_start:.2f}s")
             
             st.markdown("---")
@@ -467,9 +492,9 @@ def main():
                 filter_info.append(f"공인중개사무소: {selected_agent}")
             
             if filter_info:
-                st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 (전체: {original_count}개)")
+                st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 → 중복 제거 후: {after_dedup_count}개 (전체: {original_count}개)")
             else:
-                st.info(f"📊 전체 데이터: {original_count}개")
+                st.info(f"📊 전체 데이터: {original_count}개 → 중복 제거 후: {after_dedup_count}개")
             # 순번 컬럼 제거
             if '순번' in df_filtered.columns:
                 df_filtered = df_filtered.drop(columns=['순번'])
@@ -622,11 +647,15 @@ def main():
                                                 agent_ranks_by_property[property_key].append(rank_value)
                                         
                                         # 같은 매물 내에서 입력한 모든 공인중개사무소의 순위 중 최소값 계산
+                                        # 하나라도 3위 이상인지 확인
                                         min_rank_by_property = {}
+                                        has_above_3_by_property = {}
                                         for property_key, ranks in agent_ranks_by_property.items():
                                             # 입력한 모든 공인중개사무소가 해당 매물에 있는지 확인
                                             if len(ranks) == len(agent_names):
                                                 min_rank_by_property[property_key] = min(ranks)
+                                                # 하나라도 3위 이상인지 확인
+                                                has_above_3_by_property[property_key] = any(rank >= 3 for rank in ranks)
                                         
                                         # 순위에 따른 색상 판단 함수
                                         def get_rank_color(row):
@@ -638,11 +667,13 @@ def main():
                                             
                                             property_key = tuple(property_key_parts)
                                             min_rank = min_rank_by_property.get(property_key, 0)
+                                            has_above_3 = has_above_3_by_property.get(property_key, False)
                                             
-                                            if min_rank >= 3:
-                                                return 'red'  # 3위 이상: 빨간색
+                                            # 빨간색: 동일 매물 내 모든 공인중개사무소의 순위 중 하나라도 3위 이상이면
+                                            if has_above_3:
+                                                return 'red'  # 하나라도 3위 이상이면: 빨간색
                                             elif min_rank >= 4:
-                                                return 'yellow'  # 4-5위: 노란색
+                                                return 'yellow'  # 최소값이 4 이상: 노란색
                                             else:
                                                 return 'white'  # 그 외: 하얀색
                                         
@@ -1040,7 +1071,7 @@ def main():
             log_app("필터 섹션 렌더링 시작")
             filter_start = time.time()
             st.subheader("🔍 필터")
-            col1, col2, col3, col4, col5 = st.columns(5)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 if '거래유형' in df.columns:
@@ -1070,32 +1101,11 @@ def main():
                     selected_dong = '전체'
             
             with col3:
-                if '층' in df.columns:
-                    # 층 숫자 정렬 함수
-                    def extract_floor_num(x):
-                        try:
-                            if isinstance(x, str):
-                                # "저층", "중층", "고층" 처리
-                                if '저층' in x or x == '저':
-                                    return 0
-                                elif '중층' in x or x == '중':
-                                    return 500
-                                elif '고층' in x or x == '고':
-                                    return 1000
-                                # 숫자 추출
-                                num_match = re.findall(r'\d+', x)
-                                return int(num_match[0]) if num_match else 999
-                            else:
-                                return 999
-                        except:
-                            return 999
-                    
-                    unique_floors = df['층'].dropna().unique()
-                    sorted_floors = sorted(unique_floors, key=extract_floor_num)
-                    floors = ['전체'] + list(sorted_floors)
-                    selected_floor = st.selectbox("층", floors, key="property_floor")
+                if '층구분' in df.columns:
+                    floor_categories = ['전체'] + list(df['층구분'].dropna().unique())
+                    selected_floor_category = st.selectbox("층구분", floor_categories, key="property_floor_category")
                 else:
-                    selected_floor = '전체'
+                    selected_floor_category = '전체'
             
             with col4:
                 if '전용면적' in df.columns:
@@ -1119,13 +1129,6 @@ def main():
                 else:
                     selected_area = '전체'
             
-            with col5:
-                if '확인일' in df.columns:
-                    dates = ['전체'] + sorted(df['확인일'].dropna().unique())
-                    selected_date = st.selectbox("확인일", dates, key="property_date")
-                else:
-                    selected_date = '전체'
-            
             # 필터링
             log_app(f"필터 UI 생성 완료 - 경과: {time.time() - filter_start:.2f}s")
             filter_process_start = time.time()
@@ -1136,39 +1139,63 @@ def main():
                 df_filtered = df_filtered[df_filtered['거래유형'] == selected_type]
             if selected_dong != '전체':
                 df_filtered = df_filtered[df_filtered['동'] == selected_dong]
-            if selected_floor != '전체':
-                df_filtered = df_filtered[df_filtered['층'] == selected_floor]
+            if selected_floor_category != '전체':
+                df_filtered = df_filtered[df_filtered['층구분'] == selected_floor_category]
             if selected_area != '전체':
                 df_filtered = df_filtered[df_filtered['전용면적'] == selected_area]
-            if selected_date != '전체':
-                df_filtered = df_filtered[df_filtered['확인일'] == selected_date]
             
             filtered_count = len(df_filtered)
             log_app(f"필터링 완료 - 필터링 후: {filtered_count}개, 경과: {time.time() - filter_process_start:.2f}s")
 
-            # 동일 매물 중 최신 확인일만 유지
-            # 같은 매물 제거 기준: 동, 층, 총층수, 거래유형, 전용면적, 공급면적 (광고사 제외)
+            # 그룹화 전 데이터 저장 (Top 3 계산용)
+            df_before_grouping = df_filtered.copy()
+
+            # 동일 매물 그룹화 (공인중개사무소를 리스트로 합치기)
+            # 같은 매물 기준: 동, 층, 총층수, 거래유형, 전용면적, 공급면적 (공인중개사무소 제외)
             dedup_start = time.time()
-            dedup_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적', '공인중개사무소']
-            if all(col in df_filtered.columns for col in dedup_key) and '확인일' in df_filtered.columns:
+            group_key = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적']
+            if all(col in df_filtered.columns for col in group_key) and '공인중개사무소' in df_filtered.columns:
                 before_dedup_count = len(df_filtered)
-                df_dedup = df_filtered.copy()
-                parsed_dates = pd.to_datetime(
-                    df_dedup['확인일'].astype(str).str.replace('.', '-', regex=False),
-                    format='%y-%m-%d',
-                    errors='coerce'
-                )
-                df_dedup['_확인일_dt'] = parsed_dates
-                df_dedup = df_dedup.sort_values('_확인일_dt', ascending=False)
-                df_dedup = df_dedup.drop_duplicates(subset=dedup_key, keep='first')
-                df_dedup = df_dedup.drop(columns=['_확인일_dt'])
-                df_filtered = df_dedup.reset_index(drop=True)
+                
+                # 그룹화 전에 확인일을 날짜 형식으로 변환 (최신 확인일 선택용)
+                if '확인일' in df_filtered.columns:
+                    parsed_dates = pd.to_datetime(
+                        df_filtered['확인일'].astype(str).str.replace('.', '-', regex=False),
+                        format='%y-%m-%d',
+                        errors='coerce'
+                    )
+                    df_filtered['_확인일_dt'] = parsed_dates
+                else:
+                    df_filtered['_확인일_dt'] = pd.NaT
+                
+                # 동일 매물 그룹화
+                grouped = df_filtered.groupby(group_key, dropna=False)
+                
+                # 각 그룹에서 처리
+                grouped_data = []
+                for group_key_values, group_df in grouped:
+                    # 최신 확인일 선택
+                    group_df_sorted = group_df.sort_values('_확인일_dt', ascending=False, na_position='last')
+                    latest_row = group_df_sorted.iloc[0].copy()
+                    
+                    # 공인중개사무소를 리스트로 합치기
+                    agents = group_df['공인중개사무소'].dropna().unique().tolist()
+                    if agents:
+                        latest_row['공인중개사무소'] = ', '.join(sorted(set(agents)))
+                    else:
+                        latest_row['공인중개사무소'] = ''
+                    
+                    grouped_data.append(latest_row)
+                
+                df_filtered = pd.DataFrame(grouped_data)
+                df_filtered = df_filtered.drop(columns=['_확인일_dt'], errors='ignore')
+                df_filtered = df_filtered.reset_index(drop=True)
                 after_dedup_count = len(df_filtered)
             else:
                 before_dedup_count = filtered_count
                 after_dedup_count = filtered_count
             
-            log_app(f"중복 제거 완료 - 제거 후: {after_dedup_count}개, 경과: {time.time() - dedup_start:.2f}s")
+            log_app(f"동일 매물 그룹화 완료 - 그룹화 후: {after_dedup_count}개, 경과: {time.time() - dedup_start:.2f}s")
             log_app(f"매물 검색 탭 전체 렌더링 완료 - 총 경과: {time.time() - tab3_start:.2f}s")
             
             st.markdown("---")
@@ -1180,17 +1207,15 @@ def main():
                 filter_info.append(f"거래유형: {selected_type}")
             if selected_dong != '전체':
                 filter_info.append(f"동: {selected_dong}")
-            if selected_floor != '전체':
-                filter_info.append(f"층: {selected_floor}")
+            if selected_floor_category != '전체':
+                filter_info.append(f"층구분: {selected_floor_category}")
             if selected_area != '전체':
                 filter_info.append(f"전용면적: {selected_area}")
-            if selected_date != '전체':
-                filter_info.append(f"확인일: {selected_date}")
             
             if filter_info:
-                st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 → 중복 제거 후: {after_dedup_count}개 (전체: {original_count}개)")
+                st.info(f"🔍 적용된 필터: {', '.join(filter_info)} | 필터링 후: {filtered_count}개 → 동일 매물 그룹화 후: {after_dedup_count}개 (전체: {original_count}개)")
             else:
-                st.info(f"📊 전체 데이터: {original_count}개 → 중복 제거 후: {after_dedup_count}개")
+                st.info(f"📊 전체 데이터: {original_count}개 → 동일 매물 그룹화 후: {after_dedup_count}개")
             
             # 순번 컬럼 제거
             if '순번' in df_filtered.columns:
@@ -1252,13 +1277,35 @@ def main():
             else:
                 st.dataframe(df_filtered, use_container_width=True)
             
-            # 공인중개사무소별 매물 개수 Top 3
+            # 공인중개사무소별 매물 개수 Top 3 (중복 제거 후)
             st.markdown("---")
             st.subheader("🏆 매물을 많이 가지고 있는 공인중개사무소 Top 3")
             
-            if '공인중개사무소' in df_filtered.columns:
-                # 공인중개사무소별 매물 개수 집계
-                agent_counts = df_filtered['공인중개사무소'].value_counts().head(3)
+            # 그룹화 전 데이터를 사용하여 공인중개사무소별 매물 개수 집계 (중복 제거 후)
+            if '공인중개사무소' in df_before_grouping.columns:
+                # 각 공인중개사무소별로 중복 제거 후 개수 계산
+                dedup_key_agent = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적']
+                agent_dedup_counts = {}
+                
+                for agent_name in df_before_grouping['공인중개사무소'].dropna().unique():
+                    agent_properties = df_before_grouping[df_before_grouping['공인중개사무소'] == agent_name].copy()
+                    
+                    if not agent_properties.empty and all(col in agent_properties.columns for col in dedup_key_agent) and '확인일' in agent_properties.columns:
+                        # 중복 제거
+                        parsed_dates = pd.to_datetime(
+                            agent_properties['확인일'].astype(str).str.replace('.', '-', regex=False),
+                            format='%y-%m-%d',
+                            errors='coerce'
+                        )
+                        agent_properties['_확인일_dt'] = parsed_dates
+                        agent_properties = agent_properties.sort_values('_확인일_dt', ascending=False)
+                        agent_properties = agent_properties.drop_duplicates(subset=dedup_key_agent, keep='first')
+                        agent_dedup_counts[agent_name] = len(agent_properties)
+                    else:
+                        agent_dedup_counts[agent_name] = len(agent_properties)
+                
+                # 중복 제거된 개수로 정렬하여 Top 3 선택
+                agent_counts = pd.Series(agent_dedup_counts).sort_values(ascending=False).head(3)
                 
                 if len(agent_counts) > 0:
                     # Top 3를 컬럼으로 표시
@@ -1279,6 +1326,56 @@ def main():
                         '매물 개수': agent_counts.values.tolist()
                     })
                     st.dataframe(agent_stats_df, use_container_width=True, hide_index=True)
+                    
+                    # 각 공인중개사무소가 가지고 있는 매물 목록 표시
+                    st.markdown("---")
+                    st.subheader("📋 각 공인중개사무소가 등록한 매물")
+                    
+                    for idx, (agent_name, count) in enumerate(agent_counts.items()):
+                        # 해당 공인중개사무소가 등록한 매물 필터링
+                        agent_properties = df_before_grouping[df_before_grouping['공인중개사무소'] == agent_name].copy()
+                        
+                        if not agent_properties.empty:
+                            # 중복 제거 (동일 매물 중 최신 확인일만 유지)
+                            dedup_key_agent = ['동', '층', '총층수', '거래유형', '전용면적', '공급면적']
+                            if all(col in agent_properties.columns for col in dedup_key_agent) and '확인일' in agent_properties.columns:
+                                parsed_dates = pd.to_datetime(
+                                    agent_properties['확인일'].astype(str).str.replace('.', '-', regex=False),
+                                    format='%y-%m-%d',
+                                    errors='coerce'
+                                )
+                                agent_properties['_확인일_dt'] = parsed_dates
+                                agent_properties = agent_properties.sort_values('_확인일_dt', ascending=False)
+                                agent_properties = agent_properties.drop_duplicates(subset=dedup_key_agent, keep='first')
+                                agent_properties = agent_properties.drop(columns=['_확인일_dt'])
+                                agent_properties = agent_properties.reset_index(drop=True)
+                            
+                            # 중복 제거된 개수
+                            deduped_count = len(agent_properties)
+                            
+                            with st.expander(f"🏢 {agent_name} ({deduped_count}개 매물)", expanded=False):
+                                # 확인일 칼럼 제거
+                                if '확인일' in agent_properties.columns:
+                                    agent_properties = agent_properties.drop(columns=['확인일'])
+                                
+                                # 순번 컬럼 제거
+                                if '순번' in agent_properties.columns:
+                                    agent_properties = agent_properties.drop(columns=['순번'])
+                                
+                                # 표시할 컬럼 선택
+                                display_cols_for_agent = [
+                                    '거래유형', '동', '층', '층구분', '전용면적',
+                                    '단지명', '총층수', '가격', '공급면적',
+                                    '공인중개사무소', '원문', '구분'
+                                ]
+                                existing_cols = [col for col in display_cols_for_agent if col in agent_properties.columns]
+                                
+                                if existing_cols:
+                                    st.dataframe(agent_properties[existing_cols], use_container_width=True, hide_index=True)
+                                else:
+                                    st.dataframe(agent_properties, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("등록한 매물이 없습니다.")
                 else:
                     st.info("공인중개사무소 정보가 없습니다.")
             else:

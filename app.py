@@ -514,7 +514,7 @@ def main():
             st.subheader("🏅 내 공인중개사 순위")
             agent_input = st.text_area(
                 "내 공인중개사무소 이름을 입력하세요 (여러 개 입력 가능, 한 줄에 하나씩 또는 쉼표로 구분)",
-                value="국민공인중개사사무소\n중동역래미안어반비스타공인중개사사무소",
+                value="국민\n중동역래미안어반비스타",
                 placeholder="예:\n영등포아트자이공인중개사사무소\n래미안탑부동산공인중개사사무소",
                 key="agent_name_input",
                 height=100
@@ -646,13 +646,13 @@ def main():
                                                     agent_ranks_by_property[property_key] = []
                                                 agent_ranks_by_property[property_key].append(rank_value)
                                         
-                                        # 같은 매물 내에서 입력한 모든 공인중개사무소의 순위 중 최소값 계산
+                                        # 같은 매물 내에서 입력한 공인중개사무소의 순위 중 최소값 계산
                                         # 하나라도 3위 이상인지 확인
                                         min_rank_by_property = {}
                                         has_above_3_by_property = {}
                                         for property_key, ranks in agent_ranks_by_property.items():
-                                            # 입력한 모든 공인중개사무소가 해당 매물에 있는지 확인
-                                            if len(ranks) == len(agent_names):
+                                            # 입력한 공인중개사무소 중 해당 매물에 있는 것들의 순위 확인
+                                            if len(ranks) > 0:
                                                 min_rank_by_property[property_key] = min(ranks)
                                                 # 하나라도 3위 이상인지 확인
                                                 has_above_3_by_property[property_key] = any(rank >= 3 for rank in ranks)

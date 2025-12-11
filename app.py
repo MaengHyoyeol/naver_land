@@ -59,6 +59,46 @@ st.markdown("""
         border: 1px solid #c3e6cb;
         margin: 1rem 0;
     }
+    
+    /* 데이터프레임 셀 텍스트 줄바꿈 - 기본값으로 확장된 상태 */
+    .stDataFrame table td,
+    .stDataFrame table th,
+    div[data-testid="stDataFrame"] table td,
+    div[data-testid="stDataFrame"] table th,
+    table[data-testid="stDataFrame"] td,
+    table[data-testid="stDataFrame"] th,
+    .element-container table td,
+    .element-container table th {
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        vertical-align: top !important;
+        max-width: none !important;
+        height: auto !important;
+        overflow: visible !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+    }
+    
+    /* 모든 테이블 셀에 줄바꿈 적용 */
+    table td, table th {
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+    
+    /* 데이터프레임 컨테이너의 overflow 제거 */
+    div[data-testid="stDataFrame"] {
+        overflow: visible !important;
+    }
+    
+    .stDataFrame {
+        overflow: visible !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -625,8 +665,9 @@ def main():
                                 if '같은매물내순위' in rankings_display.columns:
                                     # 여러 공인중개사무소가 입력된 경우, 같은 매물 내 최소 순위 계산
                                     if len(agent_names) > 1:
-                                        # 같은 매물 그룹별로 입력한 공인중개사무소들의 순위 수집
-                                        agent_ranks_by_property = {}  # {property_key: [rank1, rank2, ...]}
+                                        # 같은 매물 그룹별로 입력한 공인중개사무소들의 순위 수집 (중개사별 최소 순위만 사용)
+                                        # 구조: {property_key: {agent_name: min_rank}}
+                                        agent_ranks_by_property = {}
                                         
                                         for idx, row in combined_rankings.iterrows():
                                             # 같은 매물 그룹 키 생성
@@ -643,19 +684,29 @@ def main():
                                             # 입력한 공인중개사무소 목록에 포함된 것만 고려
                                             if pd.notna(rank_value) and current_agent in agent_names:
                                                 if property_key not in agent_ranks_by_property:
-                                                    agent_ranks_by_property[property_key] = []
-                                                agent_ranks_by_property[property_key].append(rank_value)
+                                                    agent_ranks_by_property[property_key] = {}
+                                                # 같은 매물 내 동일 중개사가 여러 번 나오면 최소 순위만 유지
+                                                if current_agent in agent_ranks_by_property[property_key]:
+                                                    agent_ranks_by_property[property_key][current_agent] = min(
+                                                        agent_ranks_by_property[property_key][current_agent],
+                                                        rank_value
+                                                    )
+                                                else:
+                                                    agent_ranks_by_property[property_key][current_agent] = rank_value
                                         
-                                        # 같은 매물 내에서 입력한 공인중개사무소의 순위 중 최소값 계산
+                                        # 같은 매물 내에서 입력한 공인중개사무소별 최소 순위 계산
                                         # 하나라도 3위 이상인지 확인
                                         min_rank_by_property = {}
                                         has_above_3_by_property = {}
-                                        for property_key, ranks in agent_ranks_by_property.items():
-                                            # 입력한 공인중개사무소 중 해당 매물에 있는 것들의 순위 확인
-                                            if len(ranks) > 0:
-                                                min_rank_by_property[property_key] = min(ranks)
-                                                # 하나라도 3위 이상인지 확인
-                                                has_above_3_by_property[property_key] = any(rank >= 3 for rank in ranks)
+                                        for property_key, agent_rank_map in agent_ranks_by_property.items():
+                                            # 입력한 공인중개사무소 중 해당 매물에 있는 것들의 최소 순위 확인
+                                            if agent_rank_map:
+                                                # 중개사별 최소 순위 중 전체 최소값
+                                                min_rank_by_property[property_key] = min(agent_rank_map.values())
+                                                # 입력한 중개사 중 최소 순위가 3위 이상인 경우가 있는지 확인
+                                                has_above_3_by_property[property_key] = any(
+                                                    rank >= 3 for rank in agent_rank_map.values()
+                                                )
                                         
                                         # 순위에 따른 색상 판단 함수
                                         def get_rank_color(row):
@@ -1272,10 +1323,51 @@ def main():
                 '공인중개사무소', '원문', '구분'
             ]
             display_cols = [col for col in preferred_order if col in df_filtered.columns]
+            
+            # 컬럼 설정: 긴 텍스트가 있는 컬럼의 너비 조정
+            column_config = {}
+            if '공인중개사무소' in display_cols:
+                column_config['공인중개사무소'] = st.column_config.TextColumn(
+                    '공인중개사무소',
+                    width='large'
+                )
+            if '원문' in display_cols:
+                column_config['원문'] = st.column_config.TextColumn(
+                    '원문',
+                    width='large'
+                )
+            
+            # 데이터프레임 줄바꿈을 위한 추가 CSS (기본값으로 확장된 상태)
+            st.markdown("""
+            <style>
+                div[data-testid="stDataFrame"] table td,
+                div[data-testid="stDataFrame"] table th {
+                    white-space: normal !important;
+                    word-wrap: break-word !important;
+                    word-break: break-word !important;
+                    overflow-wrap: break-word !important;
+                    vertical-align: top !important;
+                    height: auto !important;
+                    overflow: visible !important;
+                    overflow-x: visible !important;
+                    overflow-y: visible !important;
+                }
+                div[data-testid="stDataFrame"] {
+                    overflow: visible !important;
+                }
+            </style>
+            """, unsafe_allow_html=True)
+            
             if display_cols:
-                st.dataframe(df_filtered[display_cols], use_container_width=True)
+                if column_config:
+                    st.dataframe(df_filtered[display_cols], use_container_width=True, column_config=column_config)
+                else:
+                    st.dataframe(df_filtered[display_cols], use_container_width=True)
             else:
-                st.dataframe(df_filtered, use_container_width=True)
+                if column_config:
+                    st.dataframe(df_filtered, use_container_width=True, column_config=column_config)
+                else:
+                    st.dataframe(df_filtered, use_container_width=True)
             
             # 공인중개사무소별 매물 개수 Top 3 (중복 제거 후)
             st.markdown("---")

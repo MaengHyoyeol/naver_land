@@ -738,7 +738,10 @@ def main():
                                             else:
                                                 return [''] * len(row)
                                         
-                                        # 정렬: 색상 → 동 → 층 → 순위 순서
+                                        # 원본 순서 보존용 인덱스
+                                        rankings_display['_orig_idx'] = range(len(rankings_display))
+                                        
+                                        # 정렬: 색상(빨강/노랑 우선) → 원본순 → 동 → 층 → 순위
                                         rankings_display['_highlight_sort'] = rankings_display.apply(
                                             lambda row: 0 if get_rank_color(row) == 'red' else (1 if get_rank_color(row) == 'yellow' else 2), 
                                             axis=1
@@ -763,9 +766,9 @@ def main():
                                         else:
                                             rankings_display['_sort_rank'] = 999
                                         rankings_display = rankings_display.sort_values(
-                                            ['_highlight_sort', '_sort_dong', '_sort_floor', '_sort_rank'],
-                                            ascending=[True, True, True, True]
-                                        ).drop(columns=[col for col in ['_highlight_sort', '_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display.columns]).reset_index(drop=True)
+                                            ['_highlight_sort', '_orig_idx', '_sort_dong', '_sort_floor', '_sort_rank'],
+                                            ascending=[True, True, True, True, True]
+                                        ).drop(columns=[col for col in ['_highlight_sort', '_orig_idx', '_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display.columns]).reset_index(drop=True)
                                         
                                     else:
                                         # 단일 공인중개사무소인 경우
@@ -788,7 +791,10 @@ def main():
                                             else:
                                                 return [''] * len(row)
                                         
-                                        # 정렬: 색상 → 동 → 층 → 순위 순서
+                                        # 원본 순서 보존용 인덱스
+                                        rankings_display['_orig_idx'] = range(len(rankings_display))
+                                        
+                                        # 정렬: 색상(빨강/노랑 우선) → 원본순 → 동 → 층 → 순위
                                         rankings_display['_highlight_sort'] = rankings_display.apply(
                                             lambda row: 0 if get_rank_color(row) == 'red' else (1 if get_rank_color(row) == 'yellow' else 2), 
                                             axis=1
@@ -813,9 +819,9 @@ def main():
                                         else:
                                             rankings_display['_sort_rank'] = 999
                                         rankings_display = rankings_display.sort_values(
-                                            ['_highlight_sort', '_sort_dong', '_sort_floor', '_sort_rank'],
-                                            ascending=[True, True, True, True]
-                                        ).drop(columns=[col for col in ['_highlight_sort', '_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display.columns]).reset_index(drop=True)
+                                            ['_highlight_sort', '_orig_idx', '_sort_dong', '_sort_floor', '_sort_rank'],
+                                            ascending=[True, True, True, True, True]
+                                        ).drop(columns=[col for col in ['_highlight_sort', '_orig_idx', '_sort_dong', '_sort_floor', '_sort_rank'] if col in rankings_display.columns]).reset_index(drop=True)
                                     
                                     styled_rankings = rankings_display.style.apply(highlight_rank, axis=1)
                                     st.dataframe(styled_rankings, use_container_width=True)

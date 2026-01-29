@@ -119,9 +119,35 @@ class NaverRealEstateCrawler:
             }
             options.add_experimental_option("prefs", prefs)
             
+            # EC2/리눅스 환경에서 크롬 바이너리 경로 지정 (없으면 첫 번째 존재하는 경로 사용)
+            chrome_candidates = [
+                "/usr/bin/google-chrome",
+                "/usr/bin/google-chrome-stable",
+                "/usr/bin/chromium-browser",
+                "/usr/bin/chromium",
+            ]
+            chrome_path = next((p for p in chrome_candidates if os.path.exists(p)), None)
+            if chrome_path:
+                options.binary_location = chrome_path
+                self._log(f"ℹ️ Chrome binary_location 설정: {chrome_path}")
+            else:
+                self._log("⚠️ Chrome binary를 찾지 못했습니다. 기본 경로로 시도합니다.")
+            
             # 타임아웃 설정
-            # version_main=None: 자동으로 Chrome 버전을 감지하여 맞는 ChromeDriver 다운로드
-            self.driver = uc.Chrome(options=options, version_main=None)
+            # Chrome 버전 감지하여 맞는 ChromeDriver 다운로드
+            # chrome_path가 있으면 버전을 직접 감지하여 지정
+            version_main = None
+            if chrome_path:
+                try:
+                    import subprocess
+                    result = subprocess.run([chrome_path, '--version'], capture_output=True, text=True)
+                    version_str = result.stdout.strip()  # "Google Chrome 144.0.7559.109"
+                    version_main = int(version_str.split()[2].split('.')[0])  # 144
+                    self._log(f"ℹ️ Chrome 버전 감지: {version_main}")
+                except Exception as e:
+                    self._log(f"⚠️ Chrome 버전 감지 실패: {e}, 자동 감지로 시도")
+            
+            self.driver = uc.Chrome(options=options, version_main=version_main)
             self.driver.set_page_load_timeout(30)  # 페이지 로딩 타임아웃 30초
             self.driver.implicitly_wait(10)  # 요소 찾기 대기 시간 10초
             

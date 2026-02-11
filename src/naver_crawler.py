@@ -134,9 +134,19 @@ class NaverRealEstateCrawler:
                 self._log("⚠️ Chrome binary를 찾지 못했습니다. 기본 경로로 시도합니다.")
             
             # 타임아웃 설정
-            # version_main: Chrome 메이저 버전 지정 (None이면 자동 감지)
-            # 자동 감지 실패 시 Chrome 버전에 맞게 수동 지정 (예: 144)
-            self.driver = uc.Chrome(options=options, version_main=144)
+            # Chrome 버전 자동 감지하여 ChromeDriver 매칭
+            version_main = None
+            if chrome_path:
+                try:
+                    import subprocess
+                    result = subprocess.run([chrome_path, '--version'], capture_output=True, text=True)
+                    version_str = result.stdout.strip()  # "Google Chrome 145.0.7632.45"
+                    version_main = int(version_str.split()[2].split('.')[0])  # 145
+                    self._log(f"ℹ️ Chrome 버전 감지: {version_main}")
+                except Exception as e:
+                    self._log(f"⚠️ Chrome 버전 감지 실패: {e}, 자동 감지로 시도")
+            
+            self.driver = uc.Chrome(options=options, version_main=version_main)
             self.driver.set_page_load_timeout(30)  # 페이지 로딩 타임아웃 30초
             self.driver.implicitly_wait(10)  # 요소 찾기 대기 시간 10초
             

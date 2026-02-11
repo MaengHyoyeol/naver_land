@@ -147,8 +147,8 @@ class NaverRealEstateCrawler:
                     self._log(f"⚠️ Chrome 버전 감지 실패: {e}, 자동 감지로 시도")
             
             self.driver = uc.Chrome(options=options, version_main=version_main)
-            self.driver.set_page_load_timeout(30)  # 페이지 로딩 타임아웃 30초
-            self.driver.implicitly_wait(10)  # 요소 찾기 대기 시간 10초
+            self.driver.set_page_load_timeout(60)  # 페이지 로딩 타임아웃 60초 (EC2용 증가)
+            self.driver.implicitly_wait(15)  # 요소 찾기 대기 시간 15초 (EC2용 증가)
             
             self._log("✅ WebDriver 초기화 완료 (undetected_chromedriver)")
             return True
@@ -208,6 +208,9 @@ class NaverRealEstateCrawler:
             # 2. 검색창 찾기 및 검색
             self._log("🔍 검색창 찾는 중...")
             try:
+                # EC2 headless 환경을 위한 추가 대기
+                time.sleep(3)
+                
                 # 여러 선택자 시도
                 search_input = None
                 selectors = [
@@ -219,8 +222,9 @@ class NaverRealEstateCrawler:
                 
                 for by, selector in selectors:
                     try:
-                        search_input = WebDriverWait(self.driver, 10).until(
-                            EC.presence_of_element_located((by, selector))
+                        # element_to_be_clickable로 변경 (더 안정적)
+                        search_input = WebDriverWait(self.driver, 15).until(
+                            EC.element_to_be_clickable((by, selector))
                         )
                         self._log(f"✅ 검색창 발견: {selector}")
                         break
@@ -230,13 +234,29 @@ class NaverRealEstateCrawler:
                 if not search_input:
                     raise Exception("검색창을 찾을 수 없습니다")
                 
-                # 검색어 입력
-                search_input.clear()
-                search_input.send_keys(keyword)
+                # 검색어 입력 (JavaScript 사용으로 더 안정적)
+                time.sleep(1)
+                try:
+                    search_input.click()
+                    time.sleep(0.5)
+                    search_input.clear()
+                    search_input.send_keys(keyword)
+                except Exception as e:
+                    self._log(f"⚠️ 일반 입력 실패, JavaScript로 시도: {e}")
+                    self.driver.execute_script("arguments[0].value = arguments[1];", search_input, keyword)
+                
                 time.sleep(1)
                 
-                # 엔터 키 입력
-                search_input.send_keys(Keys.RETURN)
+                # 엔터 키 입력 (JavaScript 폴백 포함)
+                try:
+                    search_input.send_keys(Keys.RETURN)
+                except Exception as e:
+                    self._log(f"⚠️ 엔터 키 실패, JavaScript로 시도: {e}")
+                    self.driver.execute_script("""
+                        var event = new KeyboardEvent('keydown', {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true});
+                        arguments[0].dispatchEvent(event);
+                    """, search_input)
+                
                 self._log("✅ 검색 실행")
                 
                 # 검색 결과 페이지 로딩 대기

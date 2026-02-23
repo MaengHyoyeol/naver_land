@@ -304,6 +304,15 @@ class NaverRealEstateCrawler:
                 current_url = self.driver.current_url
                 self._log(f"   검색 후 URL: {current_url}")
                 
+                # 디버그 스크린샷 저장
+                try:
+                    os.makedirs('logs', exist_ok=True)
+                    screenshot_path = f"logs/debug_search_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    self.driver.save_screenshot(screenshot_path)
+                    self._log(f"📸 검색 결과 스크린샷: {screenshot_path}")
+                except Exception as e:
+                    self._log(f"⚠️ 스크린샷 실패: {e}")
+                
                 if '/complexes/' in current_url:
                     self._log("✅ 단지 상세 페이지로 이동됨")
                 else:
@@ -311,7 +320,7 @@ class NaverRealEstateCrawler:
                     try:
                         keyword_normalized = keyword.replace(' ', '')
                         
-                        # 검색 결과 DOM이 JS로 렌더링될 때까지 대기 (EC2 headless 대응)
+                        # 검색 결과 DOM이 JS로 렌더링될 때까지 대기 (EC2 대응)
                         complex_link = None
                         link_selectors = [
                             f"//a[contains(@href, '/complexes/') and contains(., '{keyword}')]",
@@ -340,7 +349,6 @@ class NaverRealEstateCrawler:
                             if complex_link:
                                 break
                             
-                            # 디버그: 현재 페이지에 어떤 링크가 있는지 확인
                             all_links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/complexes/']")
                             self._log(f"   🔎 /complexes/ 링크 수: {len(all_links)}")
                             if all_links:
@@ -349,8 +357,43 @@ class NaverRealEstateCrawler:
                                 complex_link = all_links[0]
                                 self._log(f"✅ 첫 번째 단지 링크 사용")
                                 break
+                            
+                            # 2회차부터: 직접 URL로 이동 시도 (검색 API 우회)
+                            if attempt == 2:
+                                self._log("🔄 검색 결과가 안 보임 → 네이버 부동산 API로 단지 검색 시도")
+                                try:
+                                    import json
+                                    api_script = f"""
+                                    return await fetch('https://new.land.naver.com/api/search?keyword={keyword}')
+                                        .then(r => r.json()).catch(e => null);
+                                    """
+                                    api_result = self.driver.execute_script(api_script)
+                                    if api_result:
+                                        self._log(f"   📡 API 응답: {json.dumps(api_result, ensure_ascii=False)[:500]}")
+                                        complexes = api_result.get('complexes', [])
+                                        if complexes:
+                                            complex_no = complexes[0].get('complexNo')
+                                            complex_name = complexes[0].get('complexName', '')
+                                            if complex_no:
+                                                direct_url = f"https://new.land.naver.com/complexes/{complex_no}"
+                                                self._log(f"✅ API에서 단지 발견: {complex_name} → {direct_url}")
+                                                self.driver.get(direct_url)
+                                                time.sleep(5)
+                                                WebDriverWait(self.driver, 30).until(
+                                                    lambda d: d.execute_script("return document.readyState") == "complete"
+                                                )
+                                                time.sleep(3)
+                                                self._log(f"   현재 URL: {self.driver.current_url}")
+                                                if '/complexes/' in self.driver.current_url:
+                                                    self._log("✅ API 경유 단지 상세 페이지 이동 성공")
+                                                    complex_link = "API_DIRECT"
+                                                    break
+                                    else:
+                                        self._log("   📡 API 응답 없음 (차단 가능성)")
+                                except Exception as api_e:
+                                    self._log(f"   📡 API 호출 실패: {api_e}")
                         
-                        if complex_link:
+                        if complex_link and complex_link != "API_DIRECT":
                             self.driver.execute_script("arguments[0].scrollIntoView(true);", complex_link)
                             time.sleep(1)
                             complex_link.click()
@@ -364,12 +407,14 @@ class NaverRealEstateCrawler:
                             
                             new_url = self.driver.current_url
                             self._log(f"   단지 상세 페이지 URL: {new_url}")
-                        else:
+                        elif complex_link != "API_DIRECT" and not complex_link:
                             self._log("⚠️  검색어와 일치하는 단지를 찾을 수 없습니다")
-                            # 디버그용: 페이지 소스 일부 저장
                             try:
-                                page_src = self.driver.page_source[:2000]
-                                self._log(f"   📄 페이지 소스 (처음 2000자):\n{page_src}")
+                                debug_screenshot = f"logs/debug_fail_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                                self.driver.save_screenshot(debug_screenshot)
+                                self._log(f"📸 실패 스크린샷: {debug_screenshot}")
+                                page_src = self.driver.page_source[:3000]
+                                self._log(f"   📄 페이지 소스 (처음 3000자):\n{page_src}")
                             except:
                                 pass
                     except Exception as e:

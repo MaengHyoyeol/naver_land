@@ -38,6 +38,7 @@ class NaverRealEstateCrawler:
         self.driver = None
         self.enable_logging = enable_logging
         self.log_file = None
+        self._virtual_display = None
         # 현재 검색 중인 단지명 (스크롤 영역이 없을 때 단지 버튼 클릭 등에 사용)
         self.current_keyword: Optional[str] = None
         
@@ -84,6 +85,32 @@ class NaverRealEstateCrawler:
                 # 로그 파일 쓰기 실패해도 계속 진행
                 pass
         
+    def _start_virtual_display(self) -> bool:
+        """Xvfb 가상 디스플레이 시작 (Linux EC2 전용)"""
+        import sys
+        if sys.platform != 'linux':
+            return False
+        try:
+            from pyvirtualdisplay import Display
+            self._virtual_display = Display(visible=0, size=(1920, 1080))
+            self._virtual_display.start()
+            return True
+        except ImportError:
+            self._log("⚠️ pyvirtualdisplay 미설치 (pip install pyvirtualdisplay)")
+            return False
+        except Exception as e:
+            self._log(f"⚠️ Xvfb 시작 실패: {e}")
+            return False
+
+    def _stop_virtual_display(self):
+        """Xvfb 가상 디스플레이 종료"""
+        if self._virtual_display:
+            try:
+                self._virtual_display.stop()
+            except:
+                pass
+            self._virtual_display = None
+
     def init_driver(self):
         """WebDriver 초기화 (봇 탐지 우회)"""
         try:
@@ -105,9 +132,14 @@ class NaverRealEstateCrawler:
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
             
-            # headless 모드 개선
+            # headless 모드: Linux에서는 Xvfb 가상 디스플레이 우선 사용
+            # --headless 플래그는 네이버에서 감지되어 JS 렌더링이 차단될 수 있음
             if self.headless:
-                options.add_argument('--headless=new')
+                if self._start_virtual_display():
+                    self._log("ℹ️ Xvfb 가상 디스플레이 사용 (headless 플래그 없이 실행)")
+                else:
+                    self._log("ℹ️ Xvfb 미설치, --headless=new 사용 (렌더링 제한 가능)")
+                    options.add_argument('--headless=new')
             
             # excludeSwitches와 useAutomationExtension 옵션은 일부 Chrome 버전에서 지원하지 않으므로 제거
             # options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -166,6 +198,7 @@ class NaverRealEstateCrawler:
         if self.driver:
             self.driver.quit()
             self._log("✅ WebDriver 종료")
+        self._stop_virtual_display()
     
     def search_complex(self, keyword: str) -> bool:
         """

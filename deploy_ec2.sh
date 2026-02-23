@@ -9,7 +9,7 @@ echo "🚀 네이버 부동산 크롤러 EC2 배포 시작..."
 # 1. 시스템 업데이트 및 필수 패키지 설치
 echo "📦 시스템 패키지 업데이트 중..."
 sudo dnf update -y
-sudo dnf install -y git python3 python3-pip python3-devel gcc gcc-c++ make wget curl unzip
+sudo dnf install -y git python3 python3-pip python3-devel gcc gcc-c++ make wget curl unzip xorg-x11-server-Xvfb
 
 # 2. Chrome 의존성 먼저 설치 (Chrome 설치 전 필수)
 echo "📚 Chrome 의존성 설치 중..."

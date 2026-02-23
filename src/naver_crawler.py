@@ -146,6 +146,8 @@ class NaverRealEstateCrawler:
                 except Exception as e:
                     self._log(f"⚠️ Chrome 버전 감지 실패: {e}, 자동 감지로 시도")
             
+            # EC2 등에서 최초 1회 ChromeDriver 다운로드 시 1-2분 소요될 수 있음
+            self._log("⏳ WebDriver 초기화 중... (EC2 최초 1회 1-2분 소요 가능)")
             self.driver = uc.Chrome(options=options, version_main=version_main)
             self.driver.set_page_load_timeout(60)  # 페이지 로딩 타임아웃 60초 (EC2용 증가)
             self.driver.implicitly_wait(15)  # 요소 찾기 대기 시간 15초 (EC2용 증가)

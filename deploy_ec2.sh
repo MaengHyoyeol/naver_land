@@ -142,6 +142,10 @@ fi
 echo "🔍 Chrome 버전 확인..."
 google-chrome --version || echo "⚠️  Chrome 실행 확인 필요"
 
+# 9-1. ChromeDriver 워밍업 (앱 첫 실행 시 1-2분 대기 방지)
+echo "🔥 ChromeDriver 사전 캐시 중... (1-2분 소요)"
+python warmup_chromedriver.py || echo "⚠️  워밍업 건너뜀 (앱 첫 검색 시 자동 다운로드)"
+
 # 10. systemd 서비스 파일 생성
 echo "⚙️  systemd 서비스 설정 중..."
 sudo tee /etc/systemd/system/naver-streamlit.service > /dev/null <<EOF

@@ -266,44 +266,38 @@ class NaverRealEstateCrawler:
                 WebDriverWait(self.driver, 30).until(
                     lambda d: d.execute_script("return document.readyState") == "complete"
                 )
-                time.sleep(2)  # 추가 안정화 시간
                 
-                # 3. 검색 결과에서 스크롤 버튼 확인 및 단지 클릭
+                # 3. 검색 결과에서 단지 찾기
                 current_url = self.driver.current_url
                 self._log(f"   검색 후 URL: {current_url}")
                 
-                # 단지 상세 페이지로 이동했는지 확인
                 if '/complexes/' in current_url:
                     self._log("✅ 단지 상세 페이지로 이동됨")
                 else:
-                    # 검색 결과 목록 페이지인 경우, 검색어와 일치하는 단지 클릭
                     self._log("🔍 검색 결과 목록에서 단지 찾는 중...")
                     try:
-                        # 스크롤 버튼이 있는지 확인
-                        scroll_buttons = self.driver.find_elements(By.CSS_SELECTOR, 
-                            "button[class*='scroll'], button[class*='more'], .scroll-button, [class*='더보기']")
+                        keyword_normalized = keyword.replace(' ', '')
                         
-                        if not scroll_buttons:
-                            # 스크롤 버튼이 없으면 검색어와 일치하는 단지 클릭
-                            self._log("⚠️  스크롤 버튼 없음, 검색어와 일치하는 단지 클릭 시도")
+                        # 검색 결과 DOM이 JS로 렌더링될 때까지 대기 (EC2 headless 대응)
+                        complex_link = None
+                        link_selectors = [
+                            f"//a[contains(@href, '/complexes/') and contains(., '{keyword}')]",
+                            f"//a[contains(@href, '/complexes/') and contains(., '{keyword_normalized}')]",
+                            f"//div[contains(@class, 'complex')]//a[contains(., '{keyword}')]",
+                            f"//div[contains(@class, 'item')]//a[contains(., '{keyword}')]",
+                            "//a[contains(@href, '/complexes/')]",
+                        ]
+                        
+                        max_retries = 5
+                        for attempt in range(1, max_retries + 1):
+                            wait_sec = 2 + attempt * 2
+                            self._log(f"   ⏳ 검색 결과 대기 중... ({attempt}/{max_retries}, {wait_sec}초 대기)")
+                            time.sleep(wait_sec)
                             
-                            # 검색어에서 공백 제거 (예: "영등포 아트자이" -> "영등포아트자이")
-                            keyword_normalized = keyword.replace(' ', '')
-                            
-                            # 단지 링크 찾기 (여러 선택자 시도)
-                            complex_link = None
-                            selectors = [
-                                f"//a[contains(@href, '/complexes/') and contains(., '{keyword}')]",
-                                f"//a[contains(@href, '/complexes/') and contains(., '{keyword_normalized}')]",
-                                f"//div[contains(@class, 'complex')]//a[contains(., '{keyword}')]",
-                                f"//div[contains(@class, 'item')]//a[contains(., '{keyword}')]",
-                            ]
-                            
-                            for selector in selectors:
+                            for selector in link_selectors:
                                 try:
                                     elements = self.driver.find_elements(By.XPATH, selector)
                                     if elements:
-                                        # 첫 번째 매칭되는 단지 클릭
                                         complex_link = elements[0]
                                         self._log(f"✅ 단지 링크 발견: {selector}")
                                         break
@@ -311,25 +305,40 @@ class NaverRealEstateCrawler:
                                     continue
                             
                             if complex_link:
-                                # 단지 클릭
-                                self.driver.execute_script("arguments[0].scrollIntoView(true);", complex_link)
-                                time.sleep(1)
-                                complex_link.click()
-                                self._log("✅ 단지 클릭 완료")
-                                
-                                # 단지 상세 페이지 로딩 대기
-                                time.sleep(3)
-                                WebDriverWait(self.driver, 30).until(
-                                    lambda d: d.execute_script("return document.readyState") == "complete"
-                                )
-                                time.sleep(2)
-                                
-                                new_url = self.driver.current_url
-                                self._log(f"   단지 상세 페이지 URL: {new_url}")
-                            else:
-                                self._log("⚠️  검색어와 일치하는 단지를 찾을 수 없습니다")
+                                break
+                            
+                            # 디버그: 현재 페이지에 어떤 링크가 있는지 확인
+                            all_links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/complexes/']")
+                            self._log(f"   🔎 /complexes/ 링크 수: {len(all_links)}")
+                            if all_links:
+                                for lnk in all_links[:3]:
+                                    self._log(f"      - {lnk.get_attribute('href')} | {lnk.text[:50]}")
+                                complex_link = all_links[0]
+                                self._log(f"✅ 첫 번째 단지 링크 사용")
+                                break
+                        
+                        if complex_link:
+                            self.driver.execute_script("arguments[0].scrollIntoView(true);", complex_link)
+                            time.sleep(1)
+                            complex_link.click()
+                            self._log("✅ 단지 클릭 완료")
+                            
+                            time.sleep(3)
+                            WebDriverWait(self.driver, 30).until(
+                                lambda d: d.execute_script("return document.readyState") == "complete"
+                            )
+                            time.sleep(2)
+                            
+                            new_url = self.driver.current_url
+                            self._log(f"   단지 상세 페이지 URL: {new_url}")
                         else:
-                            self._log("✅ 스크롤 버튼 발견, 스크롤 진행")
+                            self._log("⚠️  검색어와 일치하는 단지를 찾을 수 없습니다")
+                            # 디버그용: 페이지 소스 일부 저장
+                            try:
+                                page_src = self.driver.page_source[:2000]
+                                self._log(f"   📄 페이지 소스 (처음 2000자):\n{page_src}")
+                            except:
+                                pass
                     except Exception as e:
                         self._log(f"⚠️  단지 클릭 시도 중 오류: {e}")
                         import traceback
